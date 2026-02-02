@@ -91,6 +91,14 @@
         .vote-bar {
             transition: width 0.5s ease-out;
         }
+
+        .countdown-timer {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 1.5rem;
+            color: #fbbf24;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+        }
     </style>
 </head>
 <body class="p-4">
@@ -151,27 +159,29 @@
         let app = {
             currentScreen: 'home',
             roomCode: null,
+            roomName: null,
             userName: null,
             userEmoji: null,
             isAdmin: false,
             db: null,
             roomRef: null,
             currentQuestion: null,
+            dailyQuestionEndTime: null,
+            usedQuestions: [],
             participants: {},
             votes: {},
             extraQuestions: [],
             chatMessages: [],
-            firebaseInitialized: false
+            firebaseInitialized: false,
+            countdownInterval: null
         };
 
         // ==================== FUNCIONES DE FIREBASE ====================
         function initFirebase() {
-            // Verificar si hay configuración
             const hasConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL;
             
             if (!hasConfig) {
                 console.error('❌ FALTA CONFIGURACIÓN DE FIREBASE');
-                console.error('Por favor, completa el objeto FIREBASE_CONFIG con tus credenciales de Firebase.');
                 app.currentScreen = 'configuring';
                 render();
                 return false;
@@ -189,7 +199,6 @@
             } catch (error) {
                 console.error('⚠️ Error al inicializar Firebase:', error.message);
                 console.log('💡 Si estás en la preview de Claude, descarga el archivo y ábrelo en tu navegador.');
-                console.log('💡 Si estás en tu navegador, verifica las reglas de seguridad en Firebase Console.');
                 app.currentScreen = 'configuring';
                 render();
                 return false;
@@ -205,14 +214,41 @@
             return code;
         }
 
+        function getRandomQuestion(excludeUsed = true) {
+            let availableQuestions = QUESTIONS_DB;
+            
+            if (excludeUsed && app.usedQuestions.length > 0) {
+                availableQuestions = QUESTIONS_DB.filter(q => 
+                    !app.usedQuestions.some(used => used.text === q.text)
+                );
+            }
+            
+            // Si se agotaron todas, reiniciar
+            if (availableQuestions.length === 0) {
+                app.usedQuestions = [];
+                availableQuestions = QUESTIONS_DB;
+            }
+            
+            return availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+        }
+
         async function createRoom() {
+            const roomNameInput = document.getElementById('roomNameInput');
+            const roomName = roomNameInput.value.trim() || 'Sala sin nombre';
+            
             showLoader(true);
             
             const code = generateRoomCode();
+            const now = Date.now();
+            const dailyQuestion = getRandomQuestion(false);
+            
             const roomData = {
                 code: code,
-                createdAt: Date.now(),
-                currentQuestion: getRandomQuestion(),
+                name: roomName,
+                createdAt: now,
+                currentQuestion: dailyQuestion,
+                dailyQuestionEndTime: now + (24 * 60 * 60 * 1000), // 24 horas
+                usedQuestions: [dailyQuestion],
                 participants: {},
                 votes: {},
                 extraQuestions: [],
@@ -221,10 +257,7 @@
 
             try {
                 await app.db.ref(`rooms/${code}`).set(roomData);
-                
-                // Guardar en historial
-                saveRoomToHistory(code);
-                
+                saveRoomToHistory(code, roomName);
                 showLoader(false);
                 joinRoom(code);
             } catch (error) {
@@ -246,7 +279,6 @@
                     return;
                 }
 
-                // Verificar si hay identidad guardada
                 const savedIdentity = localStorage.getItem(`identity_${code}`);
                 
                 if (savedIdentity) {
@@ -267,16 +299,13 @@
         }
 
         function enterRoom() {
-            // Guardar identidad
             localStorage.setItem(`identity_${app.roomCode}`, JSON.stringify({
                 name: app.userName,
                 emoji: app.userEmoji
             }));
 
-            // Guardar en historial
-            saveRoomToHistory(app.roomCode);
+            saveRoomToHistory(app.roomCode, app.roomName);
 
-            // Registrar participante en Firebase
             const participantRef = app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`);
             participantRef.set({
                 name: app.userName,
@@ -284,60 +313,130 @@
                 lastSeen: Date.now()
             });
 
-            // Mantener presencia
             participantRef.onDisconnect().remove();
-
-            // Configurar listeners
             setupRoomListeners();
 
             app.currentScreen = 'game';
             render();
+            startCountdown();
         }
 
         function setupRoomListeners() {
             const roomRef = app.db.ref(`rooms/${app.roomCode}`);
 
-            // Escuchar pregunta actual
+            // Nombre de la sala
+            roomRef.child('name').on('value', (snapshot) => {
+                app.roomName = snapshot.val();
+                render();
+            });
+
+            // Pregunta actual
             roomRef.child('currentQuestion').on('value', (snapshot) => {
                 app.currentQuestion = snapshot.val();
                 render();
             });
 
-            // Escuchar participantes
+            // Tiempo de finalización diario
+            roomRef.child('dailyQuestionEndTime').on('value', (snapshot) => {
+                app.dailyQuestionEndTime = snapshot.val();
+                checkDailyReset();
+                render();
+            });
+
+            // Preguntas usadas
+            roomRef.child('usedQuestions').on('value', (snapshot) => {
+                app.usedQuestions = snapshot.val() || [];
+            });
+
+            // Participantes
             roomRef.child('participants').on('value', (snapshot) => {
                 app.participants = snapshot.val() || {};
                 render();
             });
 
-            // Escuchar votos
+            // Votos
             roomRef.child('votes').on('value', (snapshot) => {
                 app.votes = snapshot.val() || {};
                 render();
             });
 
-            // Escuchar preguntas extra
+            // Preguntas extra
             roomRef.child('extraQuestions').on('value', (snapshot) => {
                 app.extraQuestions = snapshot.val() || [];
                 render();
             });
 
-            // Escuchar chat
+            // Chat
             roomRef.child('chat').on('value', (snapshot) => {
                 app.chatMessages = snapshot.val() || [];
                 render();
             });
         }
 
-        function getRandomQuestion() {
-            return QUESTIONS_DB[Math.floor(Math.random() * QUESTIONS_DB.length)];
+        async function checkDailyReset() {
+            if (!app.dailyQuestionEndTime) return;
+            
+            const now = Date.now();
+            
+            if (now >= app.dailyQuestionEndTime) {
+                // Ha pasado 24h, resetear
+                const newQuestion = getRandomQuestion(true);
+                const newEndTime = now + (24 * 60 * 60 * 1000);
+                
+                await app.db.ref(`rooms/${app.roomCode}`).update({
+                    currentQuestion: newQuestion,
+                    dailyQuestionEndTime: newEndTime,
+                    usedQuestions: [...app.usedQuestions, newQuestion],
+                    votes: {},
+                    extraQuestions: []
+                });
+            }
+        }
+
+        function startCountdown() {
+            if (app.countdownInterval) {
+                clearInterval(app.countdownInterval);
+            }
+            
+            app.countdownInterval = setInterval(() => {
+                updateCountdown();
+            }, 1000);
+        }
+
+        function updateCountdown() {
+            const countdownEl = document.getElementById('countdown');
+            if (!countdownEl || !app.dailyQuestionEndTime) return;
+            
+            const now = Date.now();
+            const remaining = app.dailyQuestionEndTime - now;
+            
+            if (remaining <= 0) {
+                countdownEl.textContent = '00:00:00';
+                checkDailyReset();
+                return;
+            }
+            
+            const hours = Math.floor(remaining / (1000 * 60 * 60));
+            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+            
+            countdownEl.textContent = 
+                `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
         async function nextQuestion() {
             if (!app.isAdmin) return;
             
-            const newQuestion = getRandomQuestion();
-            await app.db.ref(`rooms/${app.roomCode}/currentQuestion`).set(newQuestion);
-            await app.db.ref(`rooms/${app.roomCode}/votes`).set({});
+            const newQuestion = getRandomQuestion(true);
+            const now = Date.now();
+            
+            await app.db.ref(`rooms/${app.roomCode}`).update({
+                currentQuestion: newQuestion,
+                dailyQuestionEndTime: now + (24 * 60 * 60 * 1000),
+                usedQuestions: [...app.usedQuestions, newQuestion],
+                votes: {},
+                extraQuestions: []
+            });
         }
 
         async function resetVotes() {
@@ -345,20 +444,67 @@
             await app.db.ref(`rooms/${app.roomCode}/votes`).set({});
         }
 
-        async function vote(targetName) {
-            const voteRef = app.db.ref(`rooms/${app.roomCode}/votes/${app.userName}`);
+        async function vote(targetName, questionId = 'daily') {
+            const voteKey = `${questionId}_${app.userName}`;
+            const voteRef = app.db.ref(`rooms/${app.roomCode}/votes/${voteKey}`);
+            
             await voteRef.set({
                 voter: app.userName,
                 voterEmoji: app.userEmoji,
                 target: targetName,
+                questionId: questionId,
                 timestamp: Date.now()
             });
         }
 
+        function canAddExtraQuestion() {
+            const lastQuestionTime = localStorage.getItem(`lastExtraQuestion_${app.roomCode}`);
+            
+            if (!lastQuestionTime) return true;
+            
+            const now = Date.now();
+            const timePassed = now - parseInt(lastQuestionTime);
+            const twentyFourHours = 24 * 60 * 60 * 1000;
+            
+            return timePassed >= twentyFourHours;
+        }
+
+        function getTimeUntilNextQuestion() {
+            const lastQuestionTime = localStorage.getItem(`lastExtraQuestion_${app.roomCode}`);
+            if (!lastQuestionTime) return null;
+            
+            const now = Date.now();
+            const timePassed = now - parseInt(lastQuestionTime);
+            const twentyFourHours = 24 * 60 * 60 * 1000;
+            const remaining = twentyFourHours - timePassed;
+            
+            if (remaining <= 0) return null;
+            
+            const hours = Math.floor(remaining / (1000 * 60 * 60));
+            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            
+            return `${hours}h ${minutes}m`;
+        }
+
         async function addExtraQuestion(category, text) {
+            if (!canAddExtraQuestion()) {
+                alert(`Debes esperar ${getTimeUntilNextQuestion()} para enviar otra pregunta.`);
+                return;
+            }
+            
             const extraRef = app.db.ref(`rooms/${app.roomCode}/extraQuestions`);
-            const newQuestions = [...app.extraQuestions, { category, text }];
+            const questionId = `extra_${Date.now()}`;
+            const newQuestions = [...app.extraQuestions, { 
+                id: questionId,
+                category, 
+                text,
+                timestamp: Date.now()
+            }];
+            
             await extraRef.set(newQuestions);
+            
+            // Guardar timestamp
+            localStorage.setItem(`lastExtraQuestion_${app.roomCode}`, Date.now().toString());
         }
 
         async function sendChatMessage(text) {
@@ -372,19 +518,17 @@
             await chatRef.set(newMessages);
         }
 
-        function saveRoomToHistory(code) {
+        function saveRoomToHistory(code, name) {
             let history = JSON.parse(localStorage.getItem('roomHistory') || '[]');
             
-            // Evitar duplicados
             history = history.filter(room => room.code !== code);
             
-            // Agregar al inicio
             history.unshift({
                 code: code,
+                name: name,
                 lastAccess: Date.now()
             });
             
-            // Limitar a 5 salas
             history = history.slice(0, 5);
             
             localStorage.setItem('roomHistory', JSON.stringify(history));
@@ -451,20 +595,6 @@
                             </p>
                         </div>
 
-                        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4">
-                            <p class="text-sm text-yellow-700 font-semibold mb-2">
-                                🔧 Para desarrolladores
-                            </p>
-                            <p class="text-xs text-yellow-600 mb-2">
-                                Si ves este mensaje en tu navegador local:
-                            </p>
-                            <ul class="text-xs text-yellow-600 list-disc list-inside space-y-1">
-                                <li>Abre la consola (F12)</li>
-                                <li>Verifica que los scripts de Firebase se cargaron</li>
-                                <li>Revisa las reglas de seguridad en Firebase Console</li>
-                            </ul>
-                        </div>
-
                         <button onclick="location.reload()" 
                                 class="w-full mt-6 gradient-purple text-white font-bold py-3 rounded-xl hover:opacity-90 transition-all">
                             🔄 Reintentar Conexión
@@ -479,7 +609,7 @@
             
             return `
                 <div class="min-h-screen flex items-center justify-center">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md overflow-hidden">
                         <div class="text-center mb-8">
                             <div class="text-6xl mb-4">👑</div>
                             <h1 class="text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">
@@ -489,21 +619,27 @@
                         </div>
 
                         <div class="space-y-4">
-                            <button onclick="createRoom()" 
-                                    class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
-                                <span class="text-xl">➕</span>
-                                Crear Sala Nueva
-                            </button>
+                            <div>
+                                <input type="text" 
+                                       id="roomNameInput"
+                                       placeholder="Nombre de la sala (ej: Cumple de Ana)"
+                                       class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-2">
+                                <button onclick="createRoom()" 
+                                        class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
+                                    <span class="text-xl">➕</span>
+                                    Crear Sala Nueva
+                                </button>
+                            </div>
 
                             <div class="flex gap-2">
                                 <input type="text" 
                                        id="roomCodeInput"
-                                       placeholder="Código de sala"
+                                       placeholder="Código"
                                        maxlength="4"
                                        class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
                                        onkeyup="this.value = this.value.toUpperCase(); if(event.key === 'Enter') joinRoomFromInput()">
                                 <button onclick="joinRoomFromInput()"
-                                        class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card">
+                                        class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card whitespace-nowrap">
                                     Unirse
                                 </button>
                             </div>
@@ -515,8 +651,9 @@
                                 <div class="space-y-2">
                                     ${history.map(room => `
                                         <button onclick="joinRoom('${room.code}')"
-                                                class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 rounded-xl transition-all">
-                                            Sala ${room.code}
+                                                class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
+                                            <div class="font-bold">${room.name}</div>
+                                            <div class="text-xs text-purple-500">Código: ${room.code}</div>
                                         </button>
                                     `).join('')}
                                 </div>
@@ -582,8 +719,10 @@
 
         function renderGame() {
             const participantsList = Object.values(app.participants);
-            const voteResults = calculateVoteResults();
-            const userVote = app.votes[app.userName];
+            const dailyVoteResults = calculateVoteResults('daily');
+            const userDailyVote = Object.values(app.votes).find(v => 
+                v.voter === app.userName && v.questionId === 'daily'
+            );
 
             return `
                 <div class="max-w-4xl mx-auto">
@@ -593,7 +732,7 @@
                             <div class="text-3xl">${app.userEmoji}</div>
                             <div>
                                 <div class="font-bold text-purple-600">${app.userName}</div>
-                                <div class="text-sm text-gray-500">Sala ${app.roomCode}</div>
+                                <div class="text-sm text-gray-500">${app.roomName || 'Sala ' + app.roomCode}</div>
                             </div>
                         </div>
                         
@@ -609,7 +748,7 @@
                         </div>
                     </div>
 
-                    <!-- Lista de Participantes (Desplegable) -->
+                    <!-- Lista de Participantes -->
                     <div id="participantsList" style="display: none;" class="bg-white rounded-2xl shadow-lg p-4 mb-4">
                         <h3 class="font-bold text-purple-600 mb-3">Participantes en la sala:</h3>
                         <div class="grid grid-cols-2 gap-2">
@@ -639,74 +778,57 @@
                         </div>
                     ` : ''}
 
-                    <!-- Pregunta Principal -->
+                    <!-- Pregunta Diaria -->
                     ${app.currentQuestion ? `
                         <div class="bg-white rounded-2xl shadow-lg p-6 mb-4 glow-card pulse-glow">
-                            <div class="text-center mb-4">
+                            <div class="flex items-center justify-between mb-4">
                                 <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-sm font-semibold">
                                     ${app.currentQuestion.category}
                                 </span>
+                                <div class="countdown-timer" id="countdown">00:00:00</div>
                             </div>
                             <h2 class="text-2xl font-bold text-purple-600 text-center mb-6">
                                 ${app.currentQuestion.text}
                             </h2>
 
-                            ${userVote ? `
-                                <!-- Resultados de Votación -->
-                                <div class="space-y-3">
-                                    ${Object.entries(voteResults).map(([name, data]) => `
-                                        <div class="bg-purple-50 rounded-xl p-3">
-                                            <div class="flex items-center justify-between mb-2">
-                                                <div class="flex items-center gap-2">
-                                                    <span class="text-2xl">${data.emoji}</span>
-                                                    <span class="font-bold">${name}</span>
-                                                </div>
-                                                <span class="font-bold text-purple-600">${data.percentage}%</span>
-                                            </div>
-                                            <div class="bg-purple-200 rounded-full h-3 overflow-hidden">
-                                                <div class="vote-bar bg-gradient-to-r from-purple-500 to-pink-500 h-full" 
-                                                     style="width: ${data.percentage}%"></div>
-                                            </div>
-                                            <div class="mt-2 text-xs text-gray-600">
-                                                Votado por: ${data.voters.map(v => `${v.emoji} ${v.name}`).join(', ')}
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            ` : `
-                                <!-- Opciones de Votación -->
-                                <div class="grid grid-cols-2 gap-3">
-                                    ${participantsList.map(p => `
-                                        <button onclick="vote('${p.name}')"
-                                                class="bg-purple-50 hover:bg-purple-100 p-4 rounded-xl transition-all text-center">
-                                            <div class="text-3xl mb-2">${p.emoji}</div>
-                                            <div class="font-semibold text-purple-700">${p.name}</div>
-                                        </button>
-                                    `).join('')}
-                                </div>
-                            `}
+                            ${userDailyVote ? renderVoteResults(dailyVoteResults) : renderVoteOptions(participantsList, 'daily')}
                         </div>
                     ` : ''}
 
                     <!-- Preguntas Extra -->
-                    ${app.extraQuestions.map((q, idx) => `
-                        <div class="bg-white rounded-2xl shadow-lg p-6 mb-4 glow-card">
-                            <div class="text-center mb-4">
-                                <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-sm font-semibold">
-                                    ${q.category} • Pregunta Extra Anónima
-                                </span>
+                    ${app.extraQuestions.map((q, idx) => {
+                        const extraVoteResults = calculateVoteResults(q.id);
+                        const userExtraVote = Object.values(app.votes).find(v => 
+                            v.voter === app.userName && v.questionId === q.id
+                        );
+                        
+                        return `
+                            <div class="bg-white rounded-2xl shadow-lg p-6 mb-4 glow-card">
+                                <div class="text-center mb-4">
+                                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-sm font-semibold">
+                                        ${q.category}
+                                    </span>
+                                </div>
+                                <h3 class="text-xl font-bold text-purple-600 text-center mb-6">
+                                    ${q.text}
+                                </h3>
+                                ${userExtraVote ? renderVoteResults(extraVoteResults) : renderVoteOptions(participantsList, q.id)}
                             </div>
-                            <h3 class="text-xl font-bold text-purple-600 text-center">
-                                ${q.text}
-                            </h3>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
 
                     <!-- Agregar Pregunta Extra -->
                     <div class="bg-white rounded-2xl shadow-lg p-6 mb-4">
-                        <h3 class="font-bold text-purple-600 mb-3">➕ Agregar Pregunta Personal Anónima</h3>
+                        <h3 class="font-bold text-purple-600 mb-3">➕ Agregar Pregunta Personal</h3>
+                        ${!canAddExtraQuestion() ? `
+                            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-3">
+                                <p class="text-sm text-yellow-700">
+                                    ⏳ Debes esperar ${getTimeUntilNextQuestion()} para enviar otra pregunta.
+                                </p>
+                            </div>
+                        ` : ''}
                         <div class="space-y-3">
-                            <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none">
+                            <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none" ${!canAddExtraQuestion() ? 'disabled' : ''}>
                                 <option value="Salseo">🔥 Salseo</option>
                                 <option value="Supervivencia">🏝️ Supervivencia</option>
                                 <option value="Personalidad">💫 Personalidad</option>
@@ -716,10 +838,12 @@
                                    id="extraText"
                                    placeholder="Escribe tu pregunta..."
                                    class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none"
+                                   ${!canAddExtraQuestion() ? 'disabled' : ''}
                                    onkeyup="if(event.key === 'Enter') addExtraQuestionFromInput()">
                             <button onclick="addExtraQuestionFromInput()"
-                                    class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card">
-                                Agregar Pregunta (Anónima)
+                                    ${!canAddExtraQuestion() ? 'disabled' : ''}
+                                    class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canAddExtraQuestion() ? 'opacity-50 cursor-not-allowed' : ''}">
+                                Agregar Pregunta
                             </button>
                         </div>
                     </div>
@@ -754,11 +878,53 @@
             `;
         }
 
-        function calculateVoteResults() {
-            const results = {};
-            const totalVotes = Object.keys(app.votes).length;
+        function renderVoteOptions(participants, questionId) {
+            return `
+                <div class="grid grid-cols-2 gap-3">
+                    ${participants.map(p => `
+                        <button onclick="vote('${p.name}', '${questionId}')"
+                                class="bg-purple-50 hover:bg-purple-100 p-4 rounded-xl transition-all text-center">
+                            <div class="text-3xl mb-2">${p.emoji}</div>
+                            <div class="font-semibold text-purple-700">${p.name}</div>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        }
 
-            // Inicializar resultados con todos los participantes
+        function renderVoteResults(results) {
+            return `
+                <div class="space-y-3">
+                    ${Object.entries(results).map(([name, data]) => `
+                        <div class="bg-purple-50 rounded-xl p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-2xl">${data.emoji}</span>
+                                    <span class="font-bold">${name}</span>
+                                </div>
+                                <span class="font-bold text-purple-600">${data.percentage}%</span>
+                            </div>
+                            <div class="bg-purple-200 rounded-full h-3 overflow-hidden">
+                                <div class="vote-bar bg-gradient-to-r from-purple-500 to-pink-500 h-full" 
+                                     style="width: ${data.percentage}%"></div>
+                            </div>
+                            ${data.voters.length > 0 ? `
+                                <div class="mt-2 text-xs text-gray-600">
+                                    Votado por: ${data.voters.map(v => `${v.emoji} ${v.name}`).join(', ')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function calculateVoteResults(questionId) {
+            const results = {};
+            const relevantVotes = Object.values(app.votes).filter(v => v.questionId === questionId);
+            const totalVotes = relevantVotes.length;
+
+            // Inicializar con todos los participantes
             Object.values(app.participants).forEach(p => {
                 results[p.name] = {
                     emoji: p.emoji,
@@ -769,7 +935,7 @@
             });
 
             // Contar votos
-            Object.values(app.votes).forEach(vote => {
+            relevantVotes.forEach(vote => {
                 if (results[vote.target]) {
                     results[vote.target].count++;
                     results[vote.target].voters.push({
@@ -804,7 +970,6 @@
             app.userEmoji = emoji;
             document.getElementById('selectedEmoji').textContent = emoji;
             
-            // Resaltar emoji seleccionado
             document.querySelectorAll('.emoji-btn').forEach(btn => {
                 btn.classList.remove('bg-purple-200', 'scale-125');
             });
@@ -832,15 +997,16 @@
         }
 
         function attachIdentityEvents() {
-            // Los eventos ya están inline en el HTML
+            // Los eventos ya están inline
         }
 
         function attachGameEvents() {
-            // Scroll al final del chat
             const chatContainer = document.getElementById('chatContainer');
             if (chatContainer) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
+            
+            updateCountdown();
         }
 
         function toggleParticipants() {
@@ -850,12 +1016,14 @@
 
         function leaveRoom() {
             if (confirm('¿Seguro que quieres salir de la sala?')) {
-                // Remover participante
                 if (app.roomCode && app.userName) {
                     app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
                 }
                 
-                // Resetear estado
+                if (app.countdownInterval) {
+                    clearInterval(app.countdownInterval);
+                }
+                
                 app.currentScreen = 'home';
                 app.roomCode = null;
                 render();
