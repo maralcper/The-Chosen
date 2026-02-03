@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>The Chosen - ¿Quién es el elegido?</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -12,21 +14,51 @@
         
         * {
             font-family: 'Poppins', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
+        }
+        
+        html {
+            overflow-x: hidden;
+            width: 100%;
         }
         
         body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            overflow-y: auto;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
             min-height: 100vh;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        #app {
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            padding-bottom: 4rem;
+        }
+        
+        .safe-container {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            padding-left: 1rem;
+            padding-right: 1rem;
         }
         
         .glow-card {
             box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
         
-        .glow-card:hover {
+        .glow-card:active {
             box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
-            transform: translateY(-2px);
+            transform: scale(0.98);
         }
         
         .gradient-bg {
@@ -95,13 +127,35 @@
         .countdown-timer {
             font-family: 'Courier New', monospace;
             font-weight: bold;
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             color: #fbbf24;
             text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
         }
+        
+        .chat-container {
+            max-height: 300px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        button {
+            touch-action: manipulation;
+            min-height: 44px;
+            min-width: 44px;
+        }
+        
+        input, select {
+            font-size: 16px !important;
+        }
+        
+        @media (max-width: 640px) {
+            .countdown-timer {
+                font-size: 1rem;
+            }
+        }
     </style>
 </head>
-<body class="p-4">
+<body>
     <div id="app"></div>
 
     <script>
@@ -116,45 +170,20 @@
             appId: "1:49156406876:web:837d574efd8caeba88f099"
         };
 
-        // ==================== CONSTANTES Y DATOS ====================
-        const EMOJIS = ['😎', '🎮', '🚀', '🌟', '💜', '🔥', '🎨', '🎭', '🎪', '🎯', '🍕', '🌮', '🍔', '🎵', '⚡', '🌈', '🦄', '👑', '💎', '🎸'];
-        
-        const QUESTIONS_DB = [
-            // Categoría: Salseo
+        const ADMIN_KEY = "Admin_Chosen_99";
+
+        // ==================== PREGUNTAS DE RESPALDO (FALLBACK) ====================
+        const FALLBACK_QUESTIONS = [
             { category: 'Salseo', text: '¿Quién tiene el secreto más jugoso que nunca ha contado?' },
-            { category: 'Salseo', text: '¿Quién es más probable que tenga un romance secreto?' },
-            { category: 'Salseo', text: '¿Quién conoce el mejor chisme de la oficina?' },
-            { category: 'Salseo', text: '¿Quién es más propenso a stalkear en redes sociales?' },
-            { category: 'Salseo', text: '¿Quién tiene la anécdota más vergonzosa guardada?' },
-            
-            // Categoría: Supervivencia
             { category: 'Supervivencia', text: '¿Quién sobreviviría más tiempo en una isla desierta?' },
-            { category: 'Supervivencia', text: '¿Quién sería el primero en morir en un apocalipsis zombie?' },
-            { category: 'Supervivencia', text: '¿Quién lideraría mejor un grupo en una crisis?' },
-            { category: 'Supervivencia', text: '¿Quién encontraría comida primero en la naturaleza?' },
-            { category: 'Supervivencia', text: '¿Quién sería el último en rendirse ante cualquier desafío?' },
-            
-            // Categoría: Personalidad
             { category: 'Personalidad', text: '¿Quién es más probable que se vuelva famoso?' },
-            { category: 'Personalidad', text: '¿Quién tiene el mejor sentido del humor?' },
-            { category: 'Personalidad', text: '¿Quién es más dramático/a cuando está enfermo/a?' },
-            { category: 'Personalidad', text: '¿Quién es más probable que olvide tu cumpleaños?' },
-            { category: 'Personalidad', text: '¿Quién daría el mejor consejo amoroso?' },
-            
-            // Categoría: Trabajo
-            { category: 'Trabajo', text: '¿Quién es más probable que llegue tarde a una reunión importante?' },
             { category: 'Trabajo', text: '¿Quién sería el mejor jefe/a?' },
-            { category: 'Trabajo', text: '¿Quién se quedaría trabajando hasta tarde sin quejarse?' },
-            { category: 'Trabajo', text: '¿Quién tiene las mejores ideas innovadoras?' },
-            { category: 'Trabajo', text: '¿Quién es más organizado/a con sus tareas?' },
-            
-            // Extras
-            { category: 'Personalidad', text: '¿Quién es más probable que haga algo loco por amor?' },
-            { category: 'Salseo', text: '¿Quién es el rey/reina del drama?' },
-            { category: 'Supervivencia', text: '¿Quién sería mejor negociando con extraterrestres?' },
-            { category: 'Trabajo', text: '¿Quién envía los mejores memes en el chat del trabajo?' }
+            { category: 'Salseo', text: '¿Quién es más probable que tenga un romance secreto?' }
         ];
 
+        // ==================== CONSTANTES ====================
+        const EMOJIS = ['😎', '🎮', '🚀', '🌟', '💜', '🔥', '🎨', '🎭', '🎪', '🎯', '🍕', '🌮', '🍔', '🎵', '⚡', '🌈', '🦄', '👑', '💎', '🎸'];
+        
         // ==================== ESTADO GLOBAL ====================
         let app = {
             currentScreen: 'home',
@@ -164,7 +193,7 @@
             userEmoji: null,
             isAdmin: false,
             db: null,
-            roomRef: null,
+            questionsDB: [],
             currentQuestion: null,
             dailyQuestionEndTime: null,
             usedQuestions: [],
@@ -194,16 +223,64 @@
                 app.db = firebase.database();
                 app.firebaseInitialized = true;
                 console.log('✅ Firebase inicializado correctamente');
-                console.log('📍 Database URL:', FIREBASE_CONFIG.databaseURL);
+                
+                // Cargar preguntas desde Firebase
+                loadQuestionsFromFirebase();
+                
                 return true;
             } catch (error) {
                 console.error('⚠️ Error al inicializar Firebase:', error.message);
-                console.log('💡 Si estás en la preview de Claude, descarga el archivo y ábrelo en tu navegador.');
+                console.log('💡 Usando preguntas de respaldo locales.');
+                app.questionsDB = FALLBACK_QUESTIONS;
                 app.currentScreen = 'configuring';
                 render();
                 return false;
             }
         }
+
+        async function loadQuestionsFromFirebase() {
+            try {
+                const snapshot = await app.db.ref('preguntas').once('value');
+                const data = snapshot.val();
+
+                if (!data || typeof data !== 'object') {
+                    console.log('⚠️ No hay preguntas en Firebase, usando respaldo local');
+                    app.questionsDB = FALLBACK_QUESTIONS;
+                    return;
+                }
+
+                const parsed = [];
+
+                // Estructura en Firebase:
+                // preguntas/
+                //   Trabajo/
+                //     trabajo_001: "¿Texto...?"
+                //     trabajo_002: "¿Texto...?"
+                //   Salseo/
+                //     salseo_001: "¿Texto...?"
+                Object.entries(data).forEach(([category, questions]) => {
+                    if (questions && typeof questions === 'object') {
+                        Object.values(questions).forEach(text => {
+                            if (typeof text === 'string') {
+                                parsed.push({ category: category, text: text });
+                            }
+                        });
+                    }
+                });
+
+                if (parsed.length > 0) {
+                    app.questionsDB = parsed;
+                    console.log(`✅ Cargadas ${parsed.length} preguntas desde Firebase`);
+                } else {
+                    console.log('⚠️ No se encontraron preguntas válidas, usando respaldo local');
+                    app.questionsDB = FALLBACK_QUESTIONS;
+                }
+            } catch (error) {
+                console.error('❌ Error al cargar preguntas de Firebase:', error);
+                app.questionsDB = FALLBACK_QUESTIONS;
+            }
+        }
+
 
         function generateRoomCode() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -215,10 +292,17 @@
         }
 
         function getRandomQuestion(excludeUsed = true) {
-            let availableQuestions = QUESTIONS_DB;
+            if (!app.questionsDB || app.questionsDB.length === 0) {
+                return {
+                    category: 'Error',
+                    text: '¡Añade una pregunta extra para jugar!'
+                };
+            }
+            
+            let availableQuestions = app.questionsDB;
             
             if (excludeUsed && app.usedQuestions.length > 0) {
-                availableQuestions = QUESTIONS_DB.filter(q => 
+                availableQuestions = app.questionsDB.filter(q => 
                     !app.usedQuestions.some(used => used.text === q.text)
                 );
             }
@@ -226,7 +310,7 @@
             // Si se agotaron todas, reiniciar
             if (availableQuestions.length === 0) {
                 app.usedQuestions = [];
-                availableQuestions = QUESTIONS_DB;
+                availableQuestions = app.questionsDB;
             }
             
             return availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
@@ -234,7 +318,8 @@
 
         async function createRoom() {
             const roomNameInput = document.getElementById('roomNameInput');
-            const roomName = roomNameInput.value.trim() || 'Sala sin nombre';
+            const roomName = roomNameInput ? roomNameInput.value.trim() : '';
+            const finalRoomName = roomName || 'Sala sin nombre';
             
             showLoader(true);
             
@@ -244,10 +329,10 @@
             
             const roomData = {
                 code: code,
-                name: roomName,
+                name: finalRoomName,
                 createdAt: now,
                 currentQuestion: dailyQuestion,
-                dailyQuestionEndTime: now + (24 * 60 * 60 * 1000), // 24 horas
+                dailyQuestionEndTime: now + (24 * 60 * 60 * 1000),
                 usedQuestions: [dailyQuestion],
                 participants: {},
                 votes: {},
@@ -257,7 +342,7 @@
 
             try {
                 await app.db.ref(`rooms/${code}`).set(roomData);
-                saveRoomToHistory(code, roomName);
+                saveRoomToHistory(code, finalRoomName);
                 showLoader(false);
                 joinRoom(code);
             } catch (error) {
@@ -279,13 +364,16 @@
                     return;
                 }
 
+                // Leer el nombre de la sala del snapshot que ya tenemos
+                app.roomName = snapshot.val().name || 'Sala sin nombre';
+
                 const savedIdentity = localStorage.getItem(`identity_${code}`);
                 
                 if (savedIdentity) {
                     const identity = JSON.parse(savedIdentity);
                     app.userName = identity.name;
-                    app.userEmoji = identity.emoji;
-                    app.isAdmin = identity.name === 'Admin';
+                    app.userEmoji = identity.emoji || '👻';
+                    app.isAdmin = identity.name === ADMIN_KEY;
                     
                     enterRoom();
                 } else {
@@ -306,14 +394,18 @@
 
             saveRoomToHistory(app.roomCode, app.roomName);
 
-            const participantRef = app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`);
-            participantRef.set({
-                name: app.userName,
-                emoji: app.userEmoji,
-                lastSeen: Date.now()
-            });
+            // Solo registrar en Firebase si NO es admin
+            if (!app.isAdmin) {
+                const participantRef = app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`);
+                participantRef.set({
+                    name: app.userName,
+                    emoji: app.userEmoji,
+                    lastSeen: Date.now()
+                });
 
-            participantRef.onDisconnect().remove();
+                participantRef.onDisconnect().remove();
+            }
+
             setupRoomListeners();
 
             app.currentScreen = 'game';
@@ -324,49 +416,41 @@
         function setupRoomListeners() {
             const roomRef = app.db.ref(`rooms/${app.roomCode}`);
 
-            // Nombre de la sala
             roomRef.child('name').on('value', (snapshot) => {
                 app.roomName = snapshot.val();
                 render();
             });
 
-            // Pregunta actual
             roomRef.child('currentQuestion').on('value', (snapshot) => {
                 app.currentQuestion = snapshot.val();
                 render();
             });
 
-            // Tiempo de finalización diario
             roomRef.child('dailyQuestionEndTime').on('value', (snapshot) => {
                 app.dailyQuestionEndTime = snapshot.val();
                 checkDailyReset();
                 render();
             });
 
-            // Preguntas usadas
             roomRef.child('usedQuestions').on('value', (snapshot) => {
                 app.usedQuestions = snapshot.val() || [];
             });
 
-            // Participantes
             roomRef.child('participants').on('value', (snapshot) => {
                 app.participants = snapshot.val() || {};
                 render();
             });
 
-            // Votos
             roomRef.child('votes').on('value', (snapshot) => {
                 app.votes = snapshot.val() || {};
                 render();
             });
 
-            // Preguntas extra
             roomRef.child('extraQuestions').on('value', (snapshot) => {
                 app.extraQuestions = snapshot.val() || [];
                 render();
             });
 
-            // Chat
             roomRef.child('chat').on('value', (snapshot) => {
                 app.chatMessages = snapshot.val() || [];
                 render();
@@ -379,7 +463,6 @@
             const now = Date.now();
             
             if (now >= app.dailyQuestionEndTime) {
-                // Ha pasado 24h, resetear
                 const newQuestion = getRandomQuestion(true);
                 const newEndTime = now + (24 * 60 * 60 * 1000);
                 
@@ -445,6 +528,9 @@
         }
 
         async function vote(targetName, questionId = 'daily') {
+            // Prevenir voto al admin
+            if (targetName === ADMIN_KEY) return;
+            
             const voteKey = `${questionId}_${app.userName}`;
             const voteRef = app.db.ref(`rooms/${app.roomCode}/votes/${voteKey}`);
             
@@ -503,7 +589,6 @@
             
             await extraRef.set(newQuestions);
             
-            // Guardar timestamp
             localStorage.setItem(`lastExtraQuestion_${app.roomCode}`, Date.now().toString());
         }
 
@@ -545,6 +630,11 @@
             }
         }
 
+        // Filtrar participantes (excluir admin)
+        function getVisibleParticipants() {
+            return Object.values(app.participants).filter(p => p.name !== ADMIN_KEY);
+        }
+
         // ==================== FUNCIONES DE RENDERIZADO ====================
         function render() {
             const appDiv = document.getElementById('app');
@@ -570,10 +660,10 @@
         function renderConfiguring() {
             return `
                 <div class="min-h-screen flex items-center justify-center p-4">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full">
+                    <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full">
                         <div class="text-center mb-6">
                             <div class="text-6xl mb-4">⚙️</div>
-                            <h1 class="text-3xl font-bold text-purple-600 mb-2">Configurando Firebase...</h1>
+                            <h1 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">Configurando Firebase...</h1>
                         </div>
                         
                         <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
@@ -582,7 +672,7 @@
                             </p>
                             <p class="text-xs text-blue-600">
                                 La preview bloquea conexiones externas por seguridad. 
-                                <strong>Descarga el archivo y ábrelo en tu navegador</strong> para que funcione correctamente.
+                                <strong>Descarga el archivo y ábrelo en tu navegador</strong> para que funcione.
                             </p>
                         </div>
 
@@ -591,7 +681,7 @@
                                 ✅ Firebase está configurado
                             </p>
                             <p class="text-xs text-green-600">
-                                Las credenciales están en el código. Solo necesitas abrir el archivo en Chrome, Firefox o Safari.
+                                Las credenciales están en el código. Ábrelo en Chrome, Firefox o Safari.
                             </p>
                         </div>
 
@@ -608,60 +698,62 @@
             const history = getRoomHistory();
             
             return `
-                <div class="min-h-screen flex items-center justify-center">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md overflow-hidden">
-                        <div class="text-center mb-8">
-                            <div class="text-6xl mb-4">👑</div>
-                            <h1 class="text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">
-                                The Chosen
-                            </h1>
-                            <p class="text-gray-600">¿Quién es el elegido?</p>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div>
-                                <input type="text" 
-                                       id="roomNameInput"
-                                       placeholder="Nombre de la sala (ej: Cumple de Ana)"
-                                       class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-2">
-                                <button onclick="createRoom()" 
-                                        class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
-                                    <span class="text-xl">➕</span>
-                                    Crear Sala Nueva
-                                </button>
+                <div class="min-h-screen flex items-center justify-center py-8">
+                    <div class="safe-container">
+                        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
+                            <div class="text-center mb-8">
+                                <div class="text-5xl sm:text-6xl mb-4">👑</div>
+                                <h1 class="text-3xl sm:text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">
+                                    The Chosen
+                                </h1>
+                                <p class="text-gray-600">¿Quién es el elegido?</p>
                             </div>
 
-                            <div class="flex gap-2">
-                                <input type="text" 
-                                       id="roomCodeInput"
-                                       placeholder="Código"
-                                       maxlength="4"
-                                       class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
-                                       onkeyup="this.value = this.value.toUpperCase(); if(event.key === 'Enter') joinRoomFromInput()">
-                                <button onclick="joinRoomFromInput()"
-                                        class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card whitespace-nowrap">
-                                    Unirse
-                                </button>
-                            </div>
-                        </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <input type="text" 
+                                           id="roomNameInput"
+                                           placeholder="Nombre de la sala (ej: Cumple de Ana)"
+                                           class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-3 text-base">
+                                    <button onclick="createRoom()" 
+                                            class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
+                                        <span class="text-xl">➕</span>
+                                        Crear Sala Nueva
+                                    </button>
+                                </div>
 
-                        ${history.length > 0 ? `
-                            <div class="mt-8">
-                                <h3 class="text-sm font-semibold text-gray-600 mb-3">📍 Salas Recientes</h3>
-                                <div class="space-y-2">
-                                    ${history.map(room => `
-                                        <button onclick="joinRoom('${room.code}')"
-                                                class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
-                                            <div class="font-bold">${room.name}</div>
-                                            <div class="text-xs text-purple-500">Código: ${room.code}</div>
-                                        </button>
-                                    `).join('')}
+                                <div class="flex flex-col gap-3">
+                                    <input type="text" 
+                                           id="roomCodeInput"
+                                           placeholder="Código"
+                                           maxlength="4"
+                                           class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
+                                           onkeyup="this.value = this.value.toUpperCase(); if(event.key === 'Enter') joinRoomFromInput()">
+                                    <button onclick="joinRoomFromInput()"
+                                            class="gradient-purple text-white font-bold px-8 py-3 rounded-xl glow-card whitespace-nowrap">
+                                        Unirse
+                                    </button>
                                 </div>
                             </div>
-                        ` : ''}
+
+                            ${history.length > 0 ? `
+                                <div class="mt-8">
+                                    <h3 class="text-sm font-semibold text-gray-600 mb-3">📍 Salas Recientes</h3>
+                                    <div class="space-y-2">
+                                        ${history.map(room => `
+                                            <button onclick="joinRoom('${room.code}')"
+                                                    class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
+                                                <div class="font-bold text-sm sm:text-base">${room.name}</div>
+                                                <div class="text-xs text-purple-500">Código: ${room.code}</div>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
 
                         <div id="loader" style="display: none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div class="bg-white rounded-2xl p-8 text-center">
+                            <div class="bg-white rounded-2xl p-8 text-center mx-4">
                                 <div class="loader mx-auto mb-4"></div>
                                 <p class="text-gray-700 font-semibold">Creando sala...</p>
                             </div>
@@ -673,44 +765,46 @@
 
         function renderIdentity() {
             return `
-                <div class="min-h-screen flex items-center justify-center">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-                        <div class="text-center mb-8">
-                            <h2 class="text-3xl font-bold text-purple-600 mb-2">
-                                Sala ${app.roomCode}
-                            </h2>
-                            <p class="text-gray-600">Elige tu identidad</p>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-2">Tu nombre</label>
-                                <input type="text" 
-                                       id="nameInput"
-                                       placeholder="Escribe tu nombre"
-                                       class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none"
-                                       onkeyup="if(event.key === 'Enter') document.getElementById('enterRoomBtn').click()">
+                <div class="min-h-screen flex items-center justify-center py-8">
+                    <div class="safe-container">
+                        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
+                            <div class="text-center mb-8">
+                                <h2 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">
+                                    Sala ${app.roomCode}
+                                </h2>
+                                <p class="text-gray-600">Elige tu identidad</p>
                             </div>
 
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-2">Tu emoji</label>
-                                <div class="grid grid-cols-10 gap-2" id="emojiGrid">
-                                    ${EMOJIS.map(emoji => `
-                                        <button onclick="selectEmoji('${emoji}')" 
-                                                class="emoji-btn text-2xl p-2 hover:bg-purple-100 rounded-lg transition-all"
-                                                data-emoji="${emoji}">
-                                            ${emoji}
-                                        </button>
-                                    `).join('')}
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tu nombre</label>
+                                    <input type="text" 
+                                           id="nameInput"
+                                           placeholder="Escribe tu nombre"
+                                           class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+                                           onkeyup="if(event.key === 'Enter') document.getElementById('enterRoomBtn').click()">
                                 </div>
-                                <div id="selectedEmoji" class="text-center mt-4 text-5xl emoji-avatar"></div>
-                            </div>
 
-                            <button id="enterRoomBtn"
-                                    onclick="submitIdentity()"
-                                    class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card mt-6">
-                                Entrar a la Sala
-                            </button>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tu emoji</label>
+                                    <div class="grid grid-cols-8 sm:grid-cols-10 gap-2" id="emojiGrid">
+                                        ${EMOJIS.map(emoji => `
+                                            <button onclick="selectEmoji('${emoji}')" 
+                                                    class="emoji-btn text-2xl p-2 hover:bg-purple-100 rounded-lg transition-all"
+                                                    data-emoji="${emoji}">
+                                                ${emoji}
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                    <div id="selectedEmoji" class="text-center mt-4 text-5xl emoji-avatar"></div>
+                                </div>
+
+                                <button id="enterRoomBtn"
+                                        onclick="submitIdentity()"
+                                        class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card mt-6">
+                                    Entrar a la Sala
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -718,60 +812,70 @@
         }
 
         function renderGame() {
-            const participantsList = Object.values(app.participants);
+            const participantsList = getVisibleParticipants();
             const dailyVoteResults = calculateVoteResults('daily');
             const userDailyVote = Object.values(app.votes).find(v => 
                 v.voter === app.userName && v.questionId === 'daily'
             );
 
             return `
-                <div class="max-w-4xl mx-auto">
+                <div class="safe-container py-4">
                     <!-- Header -->
-                    <div class="bg-white rounded-2xl shadow-lg p-4 mb-4 flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <div class="text-3xl">${app.userEmoji}</div>
-                            <div>
-                                <div class="font-bold text-purple-600">${app.userName}</div>
-                                <div class="text-sm text-gray-500">${app.roomName || 'Sala ' + app.roomCode}</div>
+                    <div class="bg-white rounded-2xl shadow-lg p-4 mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-3 flex-1 min-w-0">
+                                <div class="text-2xl sm:text-3xl flex-shrink-0">${app.userEmoji}</div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-bold text-purple-600 truncate">${app.userName}</div>
+                                    <div class="text-xs sm:text-sm text-gray-500 truncate">${app.roomName || 'Sala ' + app.roomCode}</div>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <div class="flex items-center gap-2">
-                            <button onclick="toggleParticipants()" 
-                                    class="bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-semibold hover:bg-purple-200 transition-all">
-                                👥 ${participantsList.length}
-                            </button>
-                            <button onclick="leaveRoom()" 
-                                    class="bg-red-100 text-red-700 px-4 py-2 rounded-lg font-semibold hover:bg-red-200 transition-all">
-                                Salir
-                            </button>
+                            
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                ${!app.isAdmin ? `
+                                    <button onclick="toggleParticipants()" 
+                                            class="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-purple-200 transition-all">
+                                        👥 ${participantsList.length}
+                                    </button>
+                                ` : ''}
+                                <button onclick="changeIdentity()" 
+                                        class="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-200 transition-all">
+                                    👤
+                                </button>
+                                <button onclick="leaveRoom()" 
+                                        class="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-red-200 transition-all">
+                                    Salir
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Lista de Participantes -->
-                    <div id="participantsList" style="display: none;" class="bg-white rounded-2xl shadow-lg p-4 mb-4">
-                        <h3 class="font-bold text-purple-600 mb-3">Participantes en la sala:</h3>
-                        <div class="grid grid-cols-2 gap-2">
-                            ${participantsList.map(p => `
-                                <div class="flex items-center gap-2 bg-purple-50 p-2 rounded-lg">
-                                    <span class="text-2xl">${p.emoji}</span>
-                                    <span class="font-semibold text-sm">${p.name}</span>
-                                </div>
-                            `).join('')}
+                    ${!app.isAdmin ? `
+                        <div id="participantsList" style="display: none;" class="bg-white rounded-2xl shadow-lg p-4 mb-4">
+                            <h3 class="font-bold text-purple-600 mb-3">Participantes:</h3>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${participantsList.map(p => `
+                                    <div class="flex items-center gap-2 bg-purple-50 p-2 rounded-lg">
+                                        <span class="text-xl sm:text-2xl">${p.emoji}</span>
+                                        <span class="font-semibold text-xs sm:text-sm truncate">${p.name}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
-                    </div>
+                    ` : ''}
 
                     ${app.isAdmin ? `
                         <!-- Admin Tools -->
                         <div class="bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl shadow-lg p-4 mb-4">
-                            <h3 class="text-white font-bold mb-3">🔧 Panel de Administrador</h3>
-                            <div class="flex gap-2">
+                            <h3 class="text-white font-bold mb-3 text-sm sm:text-base">🔧 Panel de Administrador</h3>
+                            <div class="flex flex-col sm:flex-row gap-2">
                                 <button onclick="nextQuestion()" 
-                                        class="flex-1 bg-white text-red-600 font-bold py-2 rounded-lg hover:bg-red-50 transition-all">
+                                        class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 transition-all text-sm">
                                     ⏭️ Siguiente Pregunta
                                 </button>
                                 <button onclick="resetVotes()" 
-                                        class="flex-1 bg-white text-red-600 font-bold py-2 rounded-lg hover:bg-red-50 transition-all">
+                                        class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 transition-all text-sm">
                                     🔄 Reiniciar Votos
                                 </button>
                             </div>
@@ -780,14 +884,14 @@
 
                     <!-- Pregunta Diaria -->
                     ${app.currentQuestion ? `
-                        <div class="bg-white rounded-2xl shadow-lg p-6 mb-4 glow-card pulse-glow">
-                            <div class="flex items-center justify-between mb-4">
-                                <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-sm font-semibold">
+                        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card pulse-glow">
+                            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+                                <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
                                     ${app.currentQuestion.category}
                                 </span>
                                 <div class="countdown-timer" id="countdown">00:00:00</div>
                             </div>
-                            <h2 class="text-2xl font-bold text-purple-600 text-center mb-6">
+                            <h2 class="text-lg sm:text-2xl font-bold text-purple-600 text-center mb-6">
                                 ${app.currentQuestion.text}
                             </h2>
 
@@ -803,13 +907,13 @@
                         );
                         
                         return `
-                            <div class="bg-white rounded-2xl shadow-lg p-6 mb-4 glow-card">
+                            <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card">
                                 <div class="text-center mb-4">
-                                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-sm font-semibold">
+                                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
                                         ${q.category}
                                     </span>
                                 </div>
-                                <h3 class="text-xl font-bold text-purple-600 text-center mb-6">
+                                <h3 class="text-base sm:text-xl font-bold text-purple-600 text-center mb-6">
                                     ${q.text}
                                 </h3>
                                 ${userExtraVote ? renderVoteResults(extraVoteResults) : renderVoteOptions(participantsList, q.id)}
@@ -817,48 +921,50 @@
                         `;
                     }).join('')}
 
-                    <!-- Agregar Pregunta Extra -->
-                    <div class="bg-white rounded-2xl shadow-lg p-6 mb-4">
-                        <h3 class="font-bold text-purple-600 mb-3">➕ Agregar Pregunta Personal</h3>
-                        ${!canAddExtraQuestion() ? `
-                            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-3">
-                                <p class="text-sm text-yellow-700">
-                                    ⏳ Debes esperar ${getTimeUntilNextQuestion()} para enviar otra pregunta.
-                                </p>
+                    ${!app.isAdmin ? `
+                        <!-- Agregar Pregunta Extra -->
+                        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4">
+                            <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">➕ Agregar Pregunta Personal</h3>
+                            ${!canAddExtraQuestion() ? `
+                                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-3">
+                                    <p class="text-xs sm:text-sm text-yellow-700">
+                                        ⏳ Debes esperar ${getTimeUntilNextQuestion()} para enviar otra pregunta.
+                                    </p>
+                                </div>
+                            ` : ''}
+                            <div class="space-y-3">
+                                <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base" ${!canAddExtraQuestion() ? 'disabled' : ''}>
+                                    <option value="Salseo">🔥 Salseo</option>
+                                    <option value="Supervivencia">🏝️ Supervivencia</option>
+                                    <option value="Personalidad">💫 Personalidad</option>
+                                    <option value="Trabajo">💼 Trabajo</option>
+                                </select>
+                                <input type="text" 
+                                       id="extraText"
+                                       placeholder="Escribe tu pregunta..."
+                                       class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+                                       ${!canAddExtraQuestion() ? 'disabled' : ''}
+                                       onkeyup="if(event.key === 'Enter') addExtraQuestionFromInput()">
+                                <button onclick="addExtraQuestionFromInput()"
+                                        ${!canAddExtraQuestion() ? 'disabled' : ''}
+                                        class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canAddExtraQuestion() ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    Agregar Pregunta
+                                </button>
                             </div>
-                        ` : ''}
-                        <div class="space-y-3">
-                            <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none" ${!canAddExtraQuestion() ? 'disabled' : ''}>
-                                <option value="Salseo">🔥 Salseo</option>
-                                <option value="Supervivencia">🏝️ Supervivencia</option>
-                                <option value="Personalidad">💫 Personalidad</option>
-                                <option value="Trabajo">💼 Trabajo</option>
-                            </select>
-                            <input type="text" 
-                                   id="extraText"
-                                   placeholder="Escribe tu pregunta..."
-                                   class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none"
-                                   ${!canAddExtraQuestion() ? 'disabled' : ''}
-                                   onkeyup="if(event.key === 'Enter') addExtraQuestionFromInput()">
-                            <button onclick="addExtraQuestionFromInput()"
-                                    ${!canAddExtraQuestion() ? 'disabled' : ''}
-                                    class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canAddExtraQuestion() ? 'opacity-50 cursor-not-allowed' : ''}">
-                                Agregar Pregunta
-                            </button>
                         </div>
-                    </div>
+                    ` : ''}
 
                     <!-- Chat de Reacciones -->
-                    <div class="bg-white rounded-2xl shadow-lg p-6">
-                        <h3 class="font-bold text-purple-600 mb-3">💬 Chat de Reacciones</h3>
-                        <div id="chatContainer" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
+                    <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-8">
+                        <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">💬 Chat de Reacciones</h3>
+                        <div id="chatContainer" class="chat-container space-y-2 mb-4">
                             ${app.chatMessages.map(msg => `
                                 <div class="chat-message bg-purple-50 rounded-lg p-3">
                                     <div class="flex items-center gap-2 mb-1">
-                                        <span class="text-xl">${msg.e}</span>
-                                        <span class="font-semibold text-sm">${msg.u}</span>
+                                        <span class="text-lg sm:text-xl">${msg.e}</span>
+                                        <span class="font-semibold text-xs sm:text-sm">${msg.u}</span>
                                     </div>
-                                    <div class="text-gray-700">${msg.t}</div>
+                                    <div class="text-gray-700 text-sm break-words">${msg.t}</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -866,11 +972,11 @@
                             <input type="text" 
                                    id="chatInput"
                                    placeholder="Escribe una reacción..."
-                                   class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none"
+                                   class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
                                    onkeyup="if(event.key === 'Enter') sendChatFromInput()">
                             <button onclick="sendChatFromInput()"
                                     class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card">
-                                Enviar
+                                📤
                             </button>
                         </div>
                     </div>
@@ -880,12 +986,12 @@
 
         function renderVoteOptions(participants, questionId) {
             return `
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-2 sm:gap-3">
                     ${participants.map(p => `
                         <button onclick="vote('${p.name}', '${questionId}')"
-                                class="bg-purple-50 hover:bg-purple-100 p-4 rounded-xl transition-all text-center">
-                            <div class="text-3xl mb-2">${p.emoji}</div>
-                            <div class="font-semibold text-purple-700">${p.name}</div>
+                                class="bg-purple-50 hover:bg-purple-100 active:bg-purple-200 p-3 sm:p-4 rounded-xl transition-all text-center">
+                            <div class="text-2xl sm:text-3xl mb-1 sm:mb-2">${p.emoji}</div>
+                            <div class="font-semibold text-purple-700 text-xs sm:text-sm truncate">${p.name}</div>
                         </button>
                     `).join('')}
                 </div>
@@ -898,18 +1004,18 @@
                     ${Object.entries(results).map(([name, data]) => `
                         <div class="bg-purple-50 rounded-xl p-3">
                             <div class="flex items-center justify-between mb-2">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-2xl">${data.emoji}</span>
-                                    <span class="font-bold">${name}</span>
+                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                    <span class="text-xl sm:text-2xl flex-shrink-0">${data.emoji}</span>
+                                    <span class="font-bold text-sm sm:text-base truncate">${name}</span>
                                 </div>
-                                <span class="font-bold text-purple-600">${data.percentage}%</span>
+                                <span class="font-bold text-purple-600 text-sm sm:text-base flex-shrink-0">${data.percentage}%</span>
                             </div>
                             <div class="bg-purple-200 rounded-full h-3 overflow-hidden">
                                 <div class="vote-bar bg-gradient-to-r from-purple-500 to-pink-500 h-full" 
                                      style="width: ${data.percentage}%"></div>
                             </div>
                             ${data.voters.length > 0 ? `
-                                <div class="mt-2 text-xs text-gray-600">
+                                <div class="mt-2 text-xs text-gray-600 break-words">
                                     Votado por: ${data.voters.map(v => `${v.emoji} ${v.name}`).join(', ')}
                                 </div>
                             ` : ''}
@@ -924,8 +1030,8 @@
             const relevantVotes = Object.values(app.votes).filter(v => v.questionId === questionId);
             const totalVotes = relevantVotes.length;
 
-            // Inicializar con todos los participantes
-            Object.values(app.participants).forEach(p => {
+            // Inicializar solo con participantes visibles
+            getVisibleParticipants().forEach(p => {
                 results[p.name] = {
                     emoji: p.emoji,
                     count: 0,
@@ -968,12 +1074,18 @@
 
         function selectEmoji(emoji) {
             app.userEmoji = emoji;
-            document.getElementById('selectedEmoji').textContent = emoji;
+            const emojiDisplay = document.getElementById('selectedEmoji');
+            if (emojiDisplay) {
+                emojiDisplay.textContent = emoji;
+            }
             
             document.querySelectorAll('.emoji-btn').forEach(btn => {
                 btn.classList.remove('bg-purple-200', 'scale-125');
             });
-            document.querySelector(`[data-emoji="${emoji}"]`).classList.add('bg-purple-200', 'scale-125');
+            const selectedBtn = document.querySelector(`[data-emoji="${emoji}"]`);
+            if (selectedBtn) {
+                selectedBtn.classList.add('bg-purple-200', 'scale-125');
+            }
         }
 
         function submitIdentity() {
@@ -985,19 +1097,24 @@
                 return;
             }
 
-            if (!app.userEmoji) {
-                alert('Por favor, selecciona un emoji');
-                return;
-            }
-
             app.userName = name;
-            app.isAdmin = name === 'Admin';
+            app.isAdmin = name === ADMIN_KEY;
             
-            enterRoom();
+            // Si es admin, usar emoji fantasma y saltar selección
+            if (app.isAdmin) {
+                app.userEmoji = '👻';
+                enterRoom();
+            } else {
+                if (!app.userEmoji) {
+                    alert('Por favor, selecciona un emoji');
+                    return;
+                }
+                enterRoom();
+            }
         }
 
         function attachIdentityEvents() {
-            // Los eventos ya están inline
+            // Eventos inline
         }
 
         function attachGameEvents() {
@@ -1011,12 +1128,14 @@
 
         function toggleParticipants() {
             const list = document.getElementById('participantsList');
-            list.style.display = list.style.display === 'none' ? 'block' : 'none';
+            if (list) {
+                list.style.display = list.style.display === 'none' ? 'block' : 'none';
+            }
         }
 
         function leaveRoom() {
             if (confirm('¿Seguro que quieres salir de la sala?')) {
-                if (app.roomCode && app.userName) {
+                if (app.roomCode && app.userName && !app.isAdmin) {
                     app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
                 }
                 
@@ -1028,6 +1147,25 @@
                 app.roomCode = null;
                 render();
             }
+        }
+
+        function changeIdentity() {
+            // Borrar participante anterior de Firebase (solo si no era admin)
+            if (app.roomCode && app.userName && !app.isAdmin) {
+                app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
+            }
+
+            // Borrar identidad guardada de esta sala
+            localStorage.removeItem(`identity_${app.roomCode}`);
+
+            // Resetear estado local
+            app.userName = null;
+            app.userEmoji = null;
+            app.isAdmin = false;
+
+            // Volver a la pantalla de selección de nombre
+            app.currentScreen = 'identity';
+            render();
         }
 
         function addExtraQuestionFromInput() {
@@ -1051,6 +1189,14 @@
 
             sendChatMessage(text);
             input.value = '';
+            
+            // Scroll al final
+            setTimeout(() => {
+                const chatContainer = document.getElementById('chatContainer');
+                if (chatContainer) {
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            }, 100);
         }
 
         // ==================== INICIALIZACIÓN ====================
@@ -1060,6 +1206,9 @@
                 render();
             }
         });
+
+        // Prevenir zoom en iOS en inputs
+        document.addEventListener('touchstart', function() {}, {passive: true});
     </script>
 </body>
 </html>
