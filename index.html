@@ -70,6 +70,9 @@ const FALLBACK_QUESTIONS = [
 ];
 const EMOJIS=['😎','🎮','🚀','🌟','💜','🔥','🎨','🎭','🎪','🎯','🍕','🌮','🍔','🎵','⚡','🌈','🦄','👑','💎','🎸'];
 
+// Constantes de tiempo
+const VOTE_CHANGE_WINDOW = 30 * 60 * 1000; // 30 minutos en milisegundos
+
 // ============================================================
 //  ESTADO GLOBAL
 // ============================================================
@@ -84,7 +87,8 @@ let app = {
     chatMessages:[],
     firebaseInitialized:false,
     countdownInterval:null,
-    activeRoomRef:null   // se guarda para hacer .off() al cambiar / salir de sala
+    activeRoomRef:null,
+    roomCreatedAt:null // Guardar cuándo se creó la sala
 };
 
 // ============================================================
@@ -99,6 +103,10 @@ function initFirebase(){
         app.db=firebase.database();
         app.firebaseInitialized=true;
         loadQuestionsFromFirebase();
+        
+        // PERSISTENCIA: Intentar recuperar sala guardada al cargar la página
+        tryRestoreLastRoom();
+        
         return true;
     } catch(e){
         app.questionsDB=FALLBACK_QUESTIONS;
@@ -117,6 +125,35 @@ async function loadQuestionsFromFirebase(){
         });
         app.questionsDB=parsed.length>0?parsed:FALLBACK_QUESTIONS;
     } catch(e){ app.questionsDB=FALLBACK_QUESTIONS; }
+}
+
+// ============================================================
+//  PERSISTENCIA AL RECARGAR PÁGINA
+// ============================================================
+function tryRestoreLastRoom(){
+    const lastRoom = localStorage.getItem('activeRoom');
+    if(lastRoom){
+        const roomData = JSON.parse(lastRoom);
+        // Verificar que no haya pasado más de 24 horas desde la última actividad
+        if(Date.now() - roomData.lastActivity < 24 * 60 * 60 * 1000){
+            joinRoom(roomData.code);
+        } else {
+            localStorage.removeItem('activeRoom');
+        }
+    }
+}
+
+function saveActiveRoom(){
+    if(app.roomCode){
+        localStorage.setItem('activeRoom', JSON.stringify({
+            code: app.roomCode,
+            lastActivity: Date.now()
+        }));
+    }
+}
+
+function clearActiveRoom(){
+    localStorage.removeItem('activeRoom');
 }
 
 // ============================================================
@@ -164,7 +201,10 @@ async function joinRoom(code){
     try{
         const snap=await app.db.ref(`rooms/${code}`).once('value');
         if(!snap.exists()){alert('La sala no existe. Verifica el código.');return;}
-        app.roomName=snap.val().name||'Sala sin nombre';
+        
+        const roomData = snap.val();
+        app.roomName=roomData.name||'Sala sin nombre';
+        app.roomCreatedAt=roomData.createdAt||Date.now();
 
         const saved=localStorage.getItem(`identity_${code}`);
         if(saved){
@@ -181,12 +221,8 @@ async function joinRoom(code){
 function enterRoom(){
     localStorage.setItem(`identity_${app.roomCode}`,JSON.stringify({name:app.userName,emoji:app.userEmoji}));
     saveRoomToHistory(app.roomCode,app.roomName);
+    saveActiveRoom(); // Guardar sala activa
 
-    /*
-     * PERSISTENCIA: se guarda el participante de forma permanente.
-     * NO hay onDisconnect().remove() → el jugador sigue apareciendo
-     * aunque cierre la pestaña o se desconecte.
-     */
     if(!app.isAdmin){
         app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).set({
             name:app.userName, emoji:app.userEmoji, joinedAt:Date.now()
@@ -201,19 +237,14 @@ function enterRoom(){
 //  LISTENERS – con limpieza para aislamiento entre salas
 // ============================================================
 function cleanupListeners(){
-    /*
-     * AISLAMIENTO: antes de salir o cambiar de sala se hace .off()
-     * sobre el roomRef anterior. Así los listeners de la sala vieja
-     * dejan de escribir en app.participants / app.votes / etc.
-     */
     if(app.activeRoomRef){ app.activeRoomRef.off(); app.activeRoomRef=null; }
     if(app.countdownInterval){ clearInterval(app.countdownInterval); app.countdownInterval=null; }
 }
 
 function setupRoomListeners(){
-    cleanupListeners();                                    // limpiar sala anterior si existe
+    cleanupListeners();
     const ref=app.db.ref(`rooms/${app.roomCode}`);
-    app.activeRoomRef=ref;                                 // guardar para limpiar después
+    app.activeRoomRef=ref;
 
     ref.child('name').on('value',             s=>{app.roomName=s.val();render();});
     ref.child('currentQuestion').on('value',  s=>{app.currentQuestion=s.val();render();});
@@ -225,6 +256,7 @@ function setupRoomListeners(){
     ref.child('extraLimits').on('value',      s=>{app.extraLimits=s.val()||{};render();});
     ref.child('superVotes').on('value',       s=>{app.superVotes=s.val()||{};render();});
     ref.child('chat').on('value',             s=>{app.chatMessages=s.val()||[];render();});
+    ref.child('createdAt').on('value',        s=>{app.roomCreatedAt=s.val();render();});
 }
 
 // ============================================================
@@ -233,10 +265,6 @@ function setupRoomListeners(){
 async function checkDailyReset(){
     if(!app.dailyQuestionEndTime||Date.now()<app.dailyQuestionEndTime) return;
     const q=getRandomQuestion(true), now=Date.now();
-    /*
-     * SINCRONIZACIÓN EXTRA: extraQuestions, extraLimits y superVotes
-     * se reinician junto con la pregunta diaria (cada 24 h desde la sala).
-     */
     await app.db.ref(`rooms/${app.roomCode}`).update({
         currentQuestion:q,
         dailyQuestionEndTime: now+86400000,
@@ -279,38 +307,62 @@ async function resetVotes(){
 }
 
 // ============================================================
-//  VOTOS + SÚPER VOTO
+//  VOTOS + SÚPER VOTO + CAMBIO DE VOTO
 // ============================================================
+function canChangeVote(questionId='daily'){
+    const voteKey = `${questionId}_${app.userName}`;
+    const userVote = app.votes[voteKey];
+    
+    if(!userVote) return true; // No ha votado aún
+    
+    const timeSinceVote = Date.now() - userVote.timestamp;
+    return timeSinceVote < VOTE_CHANGE_WINDOW; // Puede cambiar si han pasado menos de 30 min
+}
+
+function getTimeRemainingToChange(questionId='daily'){
+    const voteKey = `${questionId}_${app.userName}`;
+    const userVote = app.votes[voteKey];
+    
+    if(!userVote) return null;
+    
+    const timeSinceVote = Date.now() - userVote.timestamp;
+    const remaining = VOTE_CHANGE_WINDOW - timeSinceVote;
+    
+    if(remaining <= 0) return null;
+    
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
+}
+
 async function vote(target,questionId='daily'){
     if(target===ADMIN_KEY) return;
+    
+    // Verificar si puede votar o cambiar voto
+    if(!canChangeVote(questionId)){
+        alert('Ya no puedes cambiar tu voto. El tiempo límite de 30 minutos ha expirado.');
+        return;
+    }
+    
     await app.db.ref(`rooms/${app.roomCode}/votes/${questionId}_${app.userName}`).set({
         voter:app.userName, voterEmoji:app.userEmoji,
         target, questionId, weight:1, timestamp:Date.now()
     });
 }
 
-/*
- * SÚPER VOTO: cambia el peso del voto del usuario a 2.
- * Solo una vez por ciclo de 24 h (controlado por superVotes en Firebase).
- */
 async function superVote(questionId='daily'){
-    if(app.superVotes[app.userName]) return;                         // ya usado este ciclo
+    if(app.superVotes[app.userName]) return;
     const key=`rooms/${app.roomCode}/votes/${questionId}_${app.userName}`;
     const snap=await app.db.ref(key).once('value');
-    if(!snap.exists()) return;                                       // debe tener voto previo
+    if(!snap.exists()) return;
     await app.db.ref(`rooms/${app.roomCode}/superVotes/${app.userName}`).set(true);
-    await app.db.ref(`${key}/weight`).set(2);                        // duplicar peso
+    await app.db.ref(`${key}/weight`).set(2);
 }
 
 // ============================================================
 //  PREGUNTA EXTRA – límite sincronizado con ciclo de sala
 // ============================================================
 function canAddExtraQuestion(){
-    /*
-     * El ciclo actual comenzó en (dailyQuestionEndTime – 24 h).
-     * Si el usuario ya agregó una pregunta DESPUÉS de ese momento → bloquear.
-     * Al reiniciarse el ciclo, extraLimits se limpia → se habilita de nuevo.
-     */
     const cycleStart=(app.dailyQuestionEndTime||0)-86400000;
     return (app.extraLimits[app.userName]||0)<cycleStart;
 }
@@ -381,14 +433,10 @@ function calculateVoteResults(questionId){
 }
 
 // ============================================================
-//  EL MATCH – parejas que más coinciden
+//  EL MATCH – parejas que más coinciden (EN TIEMPO REAL)
 // ============================================================
 function calculateMatch(){
-    /*
-     * Agrupa cada voto por pregunta → mapa { questionId: { voter: target } }.
-     * Luego para cada par de jugadores cuenta en cuántas preguntas eligieron
-     * al mismo target. Devuelve las parejas con el máximo de coincidencias.
-     */
+    // Mostrar matches en tiempo real conforme votan los usuarios
     const byQ={};
     Object.values(app.votes).forEach(v=>{
         if(!byQ[v.questionId]) byQ[v.questionId]={};
@@ -438,25 +486,18 @@ function submitIdentity(){
     else{ if(!app.userEmoji){alert('Selecciona un emoji');return;} enterRoom(); }
 }
 
-/*
- * PERSISTENCIA – leaveRoom / changeIdentity ya NO eliminan
- * el participante de Firebase. Solo limpian listeners locales.
- */
 function leaveRoom(){
     if(!confirm('¿Seguro que quieres salir?')) return;
     cleanupListeners();
+    clearActiveRoom(); // Limpiar sala activa
     app.currentScreen='home'; app.roomCode=null; render();
 }
+
 function changeIdentity(){
     cleanupListeners();
-
-    // Borrar el participante ANTERIOR para que no quede fantasma.
-    // Es el único lugar donde un remove es correcto: el usuario
-    // está cambiando activamente su nombre dentro de la misma sala.
     if(app.roomCode && app.userName && !app.isAdmin){
         app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
     }
-
     localStorage.removeItem(`identity_${app.roomCode}`);
     app.userName=null; app.userEmoji=null; app.isAdmin=false;
     app.currentScreen='identity'; render();
@@ -499,290 +540,279 @@ function attachGameEvents(){
 
 // ── Configuring ──────────────────────────────────────────────
 function renderConfiguring(){
-    return `<div class="min-h-screen flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full">
-            <div class="text-center mb-6"><div class="text-6xl mb-4">⚙️</div>
-                <h1 class="text-2xl sm:text-3xl font-bold text-purple-600">Configurando Firebase...</h1></div>
-            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-                <p class="text-sm text-blue-700 font-semibold">ℹ️ ¿Estás viendo esto en la preview de Claude?</p>
-                <p class="text-xs text-blue-600">La preview bloquea conexiones externas. <strong>Descarga el archivo y ábrelo en tu navegador.</strong></p>
-            </div>
-            <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
-                <p class="text-sm text-green-700 font-semibold">✅ Firebase está configurado</p>
-                <p class="text-xs text-green-600">Ábrelo en Chrome, Firefox o Safari.</p>
-            </div>
-            <button onclick="location.reload()" class="w-full mt-4 gradient-purple text-white font-bold py-3 rounded-xl">🔄 Reintentar</button>
-        </div></div>`;
+    return`<div class="min-h-screen flex items-center justify-center p-4">
+<div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full">
+<div class="text-center mb-6"><div class="text-6xl mb-4">⚙️</div>
+<h1 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">Configurando Firebase...</h1></div>
+<div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+<p class="text-sm text-blue-700 font-semibold mb-2">ℹ️ ¿Estás viendo esto en la preview?</p>
+<p class="text-xs text-blue-600">Descarga el archivo y ábrelo en tu navegador.</p></div>
+<button onclick="location.reload()" class="w-full mt-6 gradient-purple text-white font-bold py-3 rounded-xl">
+🔄 Reintentar</button></div></div>`;
 }
 
 // ── Home ─────────────────────────────────────────────────────
 function renderHome(){
-    const history=getRoomHistory();
-    return `<div class="min-h-screen flex items-center justify-center py-8"><div class="safe-container">
-        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
-            <div class="text-center mb-8">
-                <div class="text-5xl sm:text-6xl mb-4">👑</div>
-                <h1 class="text-3xl sm:text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">The Chosen</h1>
-                <p class="text-gray-600">¿Quién es el elegido?</p>
-            </div>
-            <div class="space-y-4">
-                <div>
-                    <input type="text" id="roomNameInput" placeholder="Nombre de la sala (ej: Cumple de Ana)"
-                        class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-3 text-base">
-                    <button onclick="createRoom()" class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
-                        <span class="text-xl">➕</span> Crear Sala Nueva</button>
-                </div>
-                <div class="flex flex-col gap-3">
-                    <input type="text" id="roomCodeInput" placeholder="Código" maxlength="4"
-                        class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
-                        onkeyup="this.value=this.value.toUpperCase();if(event.key==='Enter')joinRoomFromInput()">
-                    <button onclick="joinRoomFromInput()" class="gradient-purple text-white font-bold px-8 py-3 rounded-xl glow-card">Unirse</button>
-                </div>
-            </div>
-            ${history.length?`<div class="mt-8">
-                <h3 class="text-sm font-semibold text-gray-600 mb-3">📍 Salas Recientes</h3>
-                <div class="space-y-2">${history.map(r=>`
-                    <button onclick="joinRoom('${r.code}')" class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
-                        <div class="font-bold text-sm sm:text-base">${r.name||'Sala'}</div>
-                        <div class="text-xs text-purple-500">Código: ${r.code}</div></button>`).join('')}</div>
-            </div>`:''}
-        </div>
-        <div id="loader" style="display:none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-2xl p-8 text-center mx-4"><div class="loader mx-auto mb-4"></div>
-                <p class="text-gray-700 font-semibold">Creando sala...</p></div>
-        </div>
-    </div></div>`;
+    const h=getRoomHistory();
+    return`<div class="min-h-screen flex items-center justify-center py-8">
+<div class="safe-container"><div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
+<div class="text-center mb-8"><div class="text-5xl sm:text-6xl mb-4">👑</div>
+<h1 class="text-3xl sm:text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">The Chosen</h1>
+<p class="text-gray-600">¿Quién es el elegido?</p></div>
+<div class="space-y-4"><div>
+<input type="text" id="roomNameInput" placeholder="Nombre de la sala (ej: Cumple de Ana)"
+class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-3 text-base">
+<button onclick="createRoom()"class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
+<span class="text-xl">➕</span>Crear Sala Nueva</button></div>
+<div class="flex gap-3">
+<input type="text" id="roomCodeInput" placeholder="Código" maxlength="4"
+class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
+onkeyup="this.value=this.value.toUpperCase();if(event.key==='Enter')joinRoomFromInput()">
+<button onclick="joinRoomFromInput()"class="gradient-purple text-white font-bold px-8 py-3 rounded-xl glow-card whitespace-nowrap">
+Unirse</button></div></div>
+${h.length?`<div class="mt-8"><h3 class="text-sm font-semibold text-gray-600 mb-3">📍 Salas Recientes</h3>
+<div class="space-y-2">${h.map(r=>`<button onclick="joinRoom('${r.code}')"
+class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
+<div class="font-bold text-sm sm:text-base">${r.name}</div>
+<div class="text-xs text-purple-500">Código: ${r.code}</div></button>`).join('')}</div></div>`:''}
+</div><div id="loader" style="display:none;"class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+<div class="bg-white rounded-2xl p-8 text-center mx-4"><div class="loader mx-auto mb-4"></div>
+<p class="text-gray-700 font-semibold">Creando sala...</p></div></div></div></div>`;
 }
 
 // ── Identity ─────────────────────────────────────────────────
 function renderIdentity(){
-    return `<div class="min-h-screen flex items-center justify-center py-8"><div class="safe-container">
-        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
-            <div class="text-center mb-8">
-                <h2 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">Sala ${app.roomCode}</h2>
-                <p class="text-gray-600">Elige tu identidad</p>
-            </div>
-            <div class="space-y-4">
-                <div><label class="block text-sm font-semibold text-gray-700 mb-2">Tu nombre</label>
-                    <input type="text" id="nameInput" placeholder="Escribe tu nombre"
-                        class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
-                        onkeyup="if(event.key==='Enter')document.getElementById('enterRoomBtn').click()"></div>
-                <div><label class="block text-sm font-semibold text-gray-700 mb-2">Tu emoji</label>
-                    <div class="grid grid-cols-8 sm:grid-cols-10 gap-2">
-                        ${EMOJIS.map(e=>`<button onclick="selectEmoji('${e}')" class="emoji-btn text-2xl p-2 hover:bg-purple-100 rounded-lg transition-all" data-emoji="${e}">${e}</button>`).join('')}
-                    </div>
-                    <div id="selectedEmoji" class="text-center mt-4 text-5xl emoji-avatar"></div>
-                </div>
-                <button id="enterRoomBtn" onclick="submitIdentity()" class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card mt-6">Entrar a la Sala</button>
-            </div>
-        </div>
-    </div></div>`;
+    return`<div class="min-h-screen flex items-center justify-center py-8">
+<div class="safe-container"><div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
+<div class="text-center mb-8"><h2 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">
+Sala ${app.roomCode}</h2><p class="text-gray-600">Elige tu identidad</p></div>
+<div class="space-y-4"><div><label class="block text-sm font-semibold text-gray-700 mb-2">Tu nombre</label>
+<input type="text" id="nameInput" placeholder="Escribe tu nombre"
+class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+onkeyup="if(event.key==='Enter')document.getElementById('enterRoomBtn').click()"></div>
+<div><label class="block text-sm font-semibold text-gray-700 mb-2">Tu emoji</label>
+<div class="grid grid-cols-8 sm:grid-cols-10 gap-2">${EMOJIS.map(e=>`<button onclick="selectEmoji('${e}')"
+class="emoji-btn text-2xl p-2 hover:bg-purple-100 rounded-lg transition-all" data-emoji="${e}">${e}</button>`).join('')}
+</div><div id="selectedEmoji"class="text-center mt-4 text-5xl emoji-avatar"></div></div>
+<button id="enterRoomBtn" onclick="submitIdentity()"class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card mt-6">
+Entrar a la Sala</button></div></div></div></div>`;
 }
 
 // ── Game ─────────────────────────────────────────────────────
 function renderGame(){
-    const parts        = getVisibleParticipants();
-    const dailyRes     = calculateVoteResults('daily');
-    const myDailyVote  = Object.values(app.votes).find(v=>v.voter===app.userName&&v.questionId==='daily');
-    const usedSuper    = !!app.superVotes[app.userName];
-    const match        = calculateMatch();
-    const canExtra     = canAddExtraQuestion();
+    const parts=getVisibleParticipants();
+    const dailyRes=calculateVoteResults('daily');
+    const voteKey=`daily_${app.userName}`;
+    const userVote=app.votes[voteKey];
+    const match=calculateMatch();
 
-    return `<div class="safe-container py-4">
-
-        <!-- HEADER -->
-        <div class="bg-white rounded-2xl shadow-lg p-4 mb-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3 flex-1 min-w-0">
-                    <div class="text-2xl sm:text-3xl flex-shrink-0">${app.userEmoji}</div>
-                    <div class="min-w-0 flex-1">
-                        <div class="font-bold text-purple-600 truncate">${app.userName}</div>
-                        <div class="text-xs sm:text-sm text-gray-500 truncate">${app.roomName||'Sala '+app.roomCode}</div>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                    ${!app.isAdmin?`<button onclick="toggleParticipants()" class="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-purple-200">👥 ${parts.length}</button>`:''}
-                    <button onclick="changeIdentity()" class="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-200">👤</button>
-                    <button onclick="leaveRoom()" class="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-red-200">Salir</button>
-                </div>
-            </div>
+    let voteSection='';
+    if(userVote){
+        const canChange=canChangeVote('daily');
+        const timeLeft=getTimeRemainingToChange('daily');
+        
+        voteSection=`
+        ${canChange && timeLeft?`
+        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-4">
+            <p class="text-sm text-yellow-700 font-semibold">⏰ Puedes cambiar tu voto</p>
+            <p class="text-xs text-yellow-600">Tiempo restante: ${timeLeft}</p>
         </div>
-
-        <!-- PARTICIPANTES (toggle) -->
-        ${!app.isAdmin?`
-        <div id="participantsList" style="display:none;" class="bg-white rounded-2xl shadow-lg p-4 mb-4">
-            <h3 class="font-bold text-purple-600 mb-3">Participantes:</h3>
-            <div class="grid grid-cols-2 gap-2">
-                ${parts.map(p=>`<div class="flex items-center gap-2 bg-purple-50 p-2 rounded-lg">
-                    <span class="text-xl sm:text-2xl">${p.emoji}</span>
-                    <span class="font-semibold text-xs sm:text-sm truncate">${p.name}</span></div>`).join('')}
-            </div>
-        </div>`:''}
-
-        <!-- ADMIN PANEL -->
-        ${app.isAdmin?`
-        <div class="bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl shadow-lg p-4 mb-4">
-            <h3 class="text-white font-bold mb-3 text-sm sm:text-base">🔧 Panel de Administrador</h3>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <button onclick="nextQuestion()" class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 text-sm">⏭️ Siguiente Pregunta</button>
-                <button onclick="resetVotes()" class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 text-sm">🔄 Reiniciar Votos</button>
-            </div>
-        </div>`:''}
-
-        <!-- PREGUNTA DIARIA -->
-        ${app.currentQuestion?`
-        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card pulse-glow">
-            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
-                <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">${app.currentQuestion.category}</span>
-                <div class="countdown-timer" id="countdown">00:00:00</div>
-            </div>
-            <h2 class="text-lg sm:text-2xl font-bold text-purple-600 text-center mb-6">${app.currentQuestion.text}</h2>
-            ${myDailyVote?renderVoteResults(dailyRes):renderVoteOptions(parts,'daily')}
-            ${renderSuperVoteButton('daily',myDailyVote,usedSuper)}
-        </div>`:''}
-
-        <!-- PREGUNTAS EXTRA -->
-        ${app.extraQuestions.map(q=>{
-            const res=calculateVoteResults(q.id);
-            const myVote=Object.values(app.votes).find(v=>v.voter===app.userName&&v.questionId===q.id);
-            return `<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card">
-                <div class="text-center mb-4">
-                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">${q.category}</span>
-                </div>
-                <h3 class="text-base sm:text-xl font-bold text-purple-600 text-center mb-6">${q.text}</h3>
-                ${myVote?renderVoteResults(res):renderVoteOptions(parts,q.id)}
-                ${renderSuperVoteButton(q.id,myVote,usedSuper)}
-            </div>`;
-        }).join('')}
-
-        <!-- EL MATCH -->
-        ${match?renderMatch(match):''}
-
-        <!-- AGREGAR PREGUNTA EXTRA -->
-        ${!app.isAdmin?`
-        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4">
-            <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">➕ Agregar Pregunta Personal</h3>
-            ${!canExtra?`<div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-3">
-                <p class="text-xs sm:text-sm text-yellow-700">⏳ Debes esperar ${getTimeUntilNextExtra()||'unos momentos'} (se reinicia con la pregunta diaria).</p>
-            </div>`:''}
-            <div class="space-y-3">
-                <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base" ${!canExtra?'disabled':''}>
-                    <option value="Salseo">🔥 Salseo</option>
-                    <option value="Supervivencia">🏝️ Supervivencia</option>
-                    <option value="Personalidad">💫 Personalidad</option>
-                    <option value="Trabajo">💼 Trabajo</option>
-                </select>
-                <input type="text" id="extraText" placeholder="Escribe tu pregunta..."
-                    class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
-                    ${!canExtra?'disabled':''} onkeyup="if(event.key==='Enter')addExtraQuestionFromInput()">
-                <button onclick="addExtraQuestionFromInput()" ${!canExtra?'disabled':''}
-                    class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canExtra?'opacity-50 cursor-not-allowed':''}">
-                    Agregar Pregunta</button>
-            </div>
-        </div>`:''}
-
-        <!-- CHAT -->
-        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-8">
-            <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">💬 Chat de Reacciones</h3>
-            <div id="chatContainer" class="chat-container space-y-2 mb-4">
-                ${app.chatMessages.map(m=>`<div class="chat-message bg-purple-50 rounded-lg p-3">
-                    <div class="flex items-center gap-2 mb-1"><span class="text-lg sm:text-xl">${m.e}</span>
-                        <span class="font-semibold text-xs sm:text-sm">${m.u}</span></div>
-                    <div class="text-gray-700 text-sm break-words">${m.t}</div></div>`).join('')}
-            </div>
-            <div class="flex gap-2">
-                <input type="text" id="chatInput" placeholder="Escribe una reacción..."
-                    class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
-                    onkeyup="if(event.key==='Enter')sendChatFromInput()">
-                <button onclick="sendChatFromInput()" class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card">📤</button>
-            </div>
+        `:''}
+        ${renderVoteResults(dailyRes)}
+        ${canChange?`
+        <div class="mt-4 pt-4 border-t border-purple-200">
+            <p class="text-sm text-gray-600 mb-3 text-center">Cambiar voto:</p>
+            ${renderVoteOptions(parts,'daily')}
         </div>
-    </div>`;
+        `:''}
+        `;
+    } else {
+        voteSection=renderVoteOptions(parts,'daily');
+    }
+
+    return`<div class="safe-container py-4">
+<div class="bg-white rounded-2xl shadow-lg p-4 mb-4">
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-3 flex-1 min-w-0">
+<div class="text-2xl sm:text-3xl flex-shrink-0">${app.userEmoji}</div>
+<div class="min-w-0 flex-1">
+<div class="font-bold text-purple-600 truncate">${app.userName}</div>
+<div class="text-xs sm:text-sm text-gray-500 truncate">${app.roomName||'Sala '+app.roomCode}</div>
+</div></div>
+<div class="flex items-center gap-2 flex-shrink-0">
+${!app.isAdmin?`<button onclick="toggleParticipants()"
+class="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-purple-200 transition-all">
+👥 ${parts.length}</button>`:''}
+<button onclick="changeIdentity()"
+class="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-200 transition-all">
+🔄</button>
+<button onclick="leaveRoom()"
+class="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-red-200 transition-all">
+Salir</button></div></div></div>
+
+${!app.isAdmin?`<div id="participantsList" style="display:none;"class="bg-white rounded-2xl shadow-lg p-4 mb-4">
+<h3 class="font-bold text-purple-600 mb-3">Participantes:</h3>
+<div class="grid grid-cols-2 gap-2">${parts.map(p=>`<div class="flex items-center gap-2 bg-purple-50 p-2 rounded-lg">
+<span class="text-xl sm:text-2xl">${p.emoji}</span>
+<span class="font-semibold text-xs sm:text-sm truncate">${p.name}</span></div>`).join('')}</div></div>`:''}
+
+${app.isAdmin?`<div class="bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl shadow-lg p-4 mb-4">
+<h3 class="text-white font-bold mb-3 text-sm sm:text-base">🔧 Panel de Administrador</h3>
+<div class="flex flex-col sm:flex-row gap-2">
+<button onclick="nextQuestion()"class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 transition-all text-sm">
+⏭️ Siguiente Pregunta</button>
+<button onclick="resetVotes()"class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 transition-all text-sm">
+🔄 Reiniciar Votos</button></div></div>`:''}
+
+${app.currentQuestion?`<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card pulse-glow">
+<div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+<span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
+${app.currentQuestion.category}</span>
+<div class="countdown-timer" id="countdown">00:00:00</div></div>
+<h2 class="text-lg sm:text-2xl font-bold text-purple-600 text-center mb-6">${app.currentQuestion.text}</h2>
+${voteSection}
+${!app.superVotes[app.userName]&&userVote?`<div class="mt-4 pt-4 border-t border-purple-200">
+<button onclick="superVote('daily')"class="w-full gradient-super text-white font-bold py-3 rounded-xl super-pulse">
+⭐ USAR SÚPER VOTO (×2)</button></div>`:''}
+</div>`:''}
+
+${app.extraQuestions.map((q,i)=>{
+    const eRes=calculateVoteResults(q.id);
+    const eKey=`${q.id}_${app.userName}`;
+    const eVote=app.votes[eKey];
+    const canChangeExtra=canChangeVote(q.id);
+    const timeLeftExtra=getTimeRemainingToChange(q.id);
+    
+    let extraVoteSection='';
+    if(eVote){
+        extraVoteSection=`
+        ${canChangeExtra && timeLeftExtra?`
+        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-4">
+            <p class="text-sm text-yellow-700 font-semibold">⏰ Puedes cambiar tu voto</p>
+            <p class="text-xs text-yellow-600">Tiempo restante: ${timeLeftExtra}</p>
+        </div>
+        `:''}
+        ${renderVoteResults(eRes)}
+        ${canChangeExtra?`
+        <div class="mt-4 pt-4 border-t border-purple-200">
+            <p class="text-sm text-gray-600 mb-3 text-center">Cambiar voto:</p>
+            ${renderVoteOptions(parts,q.id)}
+        </div>
+        `:''}
+        `;
+    } else {
+        extraVoteSection=renderVoteOptions(parts,q.id);
+    }
+    
+    return`<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card">
+<div class="text-center mb-4"><span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
+${q.category}</span></div>
+<h3 class="text-base sm:text-xl font-bold text-purple-600 text-center mb-6">${q.text}</h3>
+${extraVoteSection}
+${!app.superVotes[app.userName]&&eVote?`<div class="mt-4 pt-4 border-t border-purple-200">
+<button onclick="superVote('${q.id}')"class="w-full gradient-super text-white font-bold py-3 rounded-xl super-pulse">
+⭐ USAR SÚPER VOTO (×2)</button></div>`:''}
+</div>`;
+}).join('')}
+
+${!app.isAdmin?`<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4">
+<h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">➕ Agregar Pregunta Personal</h3>
+${!canAddExtraQuestion()?`<div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-3">
+<p class="text-xs sm:text-sm text-yellow-700">⏳ Espera ${getTimeUntilNextExtra()}</p></div>`:''}
+<div class="space-y-3">
+<select id="extraCategory"class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+${!canAddExtraQuestion()?'disabled':''}>
+<option value="Salseo">🔥 Salseo</option>
+<option value="Supervivencia">🏝️ Supervivencia</option>
+<option value="Personalidad">💫 Personalidad</option>
+<option value="Trabajo">💼 Trabajo</option></select>
+<input type="text" id="extraText" placeholder="Escribe tu pregunta..."
+class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+${!canAddExtraQuestion()?'disabled':''}
+onkeyup="if(event.key==='Enter')addExtraQuestionFromInput()">
+<button onclick="addExtraQuestionFromInput()"${!canAddExtraQuestion()?'disabled':''}
+class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canAddExtraQuestion()?'opacity-50 cursor-not-allowed':''}">
+Agregar Pregunta</button></div></div>`:''}
+
+${match?`<div class="bg-gradient-to-r from-pink-500 to-purple-500 rounded-2xl shadow-lg p-4 sm:p-6 mb-4">
+<h3 class="text-white font-bold mb-3 text-center text-lg sm:text-xl">💕 Perfect Match</h3>
+<p class="text-white text-center text-sm mb-4">
+Estas parejas coincidieron ${match.maxCount} ${match.maxCount===1?'vez':'veces'} de ${match.totalQuestions} preguntas
+</p>
+<div class="space-y-2">${match.topPairs.map(pair=>{
+    const p1=app.participants[pair[0]], p2=app.participants[pair[1]];
+    return p1&&p2?`<div class="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-3 flex items-center justify-center gap-3">
+<div class="text-center"><div class="text-3xl mb-1">${p1.emoji}</div>
+<div class="text-white text-xs font-semibold">${p1.name}</div></div>
+<div class="text-3xl">💖</div>
+<div class="text-center"><div class="text-3xl mb-1">${p2.emoji}</div>
+<div class="text-white text-xs font-semibold">${p2.name}</div></div></div>`:'';
+}).join('')}</div></div>`:''}
+
+<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-8">
+<h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">💬 Chat de Reacciones</h3>
+<div id="chatContainer"class="chat-container space-y-2 mb-4">
+${app.chatMessages.map(m=>`<div class="chat-message bg-purple-50 rounded-lg p-3">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-lg sm:text-xl">${m.e}</span>
+<span class="font-semibold text-xs sm:text-sm">${m.u}</span></div>
+<div class="text-gray-700 text-sm break-words">${m.t}</div></div>`).join('')}
+</div>
+<div class="flex gap-2">
+<input type="text" id="chatInput" placeholder="Escribe una reacción..."
+class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+onkeyup="if(event.key==='Enter')sendChatFromInput()">
+<button onclick="sendChatFromInput()"class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card">
+📤</button></div></div></div>`;
 }
 
-// ── Sub-componentes de render ────────────────────────────────
-
-/* Botón de Súper Voto (aparece solo si el usuario ya votó y no ha usado el súper) */
-function renderSuperVoteButton(questionId, myVote, usedSuper){
-    if(app.isAdmin||!myVote) return '';
-    if(!usedSuper) return `
-        <div class="mt-4 pt-4 border-t border-gray-100">
-            <button onclick="superVote('${questionId}')"
-                class="w-full gradient-super text-white font-bold py-3 rounded-xl super-pulse flex items-center justify-center gap-2 text-sm sm:text-base">
-                <span class="text-lg">⚡</span> Usar Súper Voto (×2)
-            </button>
-            <p class="text-center text-xs text-gray-500 mt-2">Hace que tu voto valga el doble. ¡Una vez al día!</p>
-        </div>`;
-    return `<div class="mt-4 pt-4 border-t border-gray-100 text-center">
-        <span class="text-xs text-orange-600 font-semibold">⚡ Ya usaste tu Súper Voto hoy</span></div>`;
+function renderVoteOptions(parts,qId){
+    return`<div class="grid grid-cols-2 gap-2 sm:gap-3">
+${parts.map(p=>`<button onclick="vote('${p.name}','${qId}')"
+class="bg-purple-50 hover:bg-purple-100 active:bg-purple-200 p-3 sm:p-4 rounded-xl transition-all text-center">
+<div class="text-2xl sm:text-3xl mb-1 sm:mb-2">${p.emoji}</div>
+<div class="font-semibold text-purple-700 text-xs sm:text-sm truncate">${p.name}</div></button>`).join('')}
+</div>`;
 }
 
-/* Opciones de voto */
-function renderVoteOptions(participants,questionId){
-    return `<div class="grid grid-cols-2 gap-2 sm:gap-3">
-        ${participants.map(p=>`<button onclick="vote('${p.name}','${questionId}')"
-            class="bg-purple-50 hover:bg-purple-100 active:bg-purple-200 p-3 sm:p-4 rounded-xl transition-all text-center">
-            <div class="text-2xl sm:text-3xl mb-1 sm:mb-2">${p.emoji}</div>
-            <div class="font-semibold text-purple-700 text-xs sm:text-sm truncate">${p.name}</div></button>`).join('')}
-    </div>`;
-}
-
-/* Resultados de voto (con badge de súper) */
-function renderVoteResults(results){
-    return `<div class="space-y-3">
-        ${Object.entries(results).map(([name,d])=>`
-        <div class="rounded-xl p-3 ${d.hasSuper?'bg-orange-50 ring-2 ring-orange-400':'bg-purple-50'}">
-            <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                    <span class="text-xl sm:text-2xl flex-shrink-0">${d.emoji}</span>
-                    <span class="font-bold text-sm sm:text-base truncate">${name}</span>
-                    ${d.hasSuper?'<span class="text-xs bg-orange-200 text-orange-700 px-2 py-0.5 rounded-full font-semibold flex-shrink-0">⚡ Súper</span>':''}
-                </div>
-                <span class="font-bold text-purple-600 text-sm sm:text-base flex-shrink-0">${d.percentage}%</span>
-            </div>
-            <div class="bg-purple-200 rounded-full h-3 overflow-hidden">
-                <div class="vote-bar h-full ${d.hasSuper?'bg-gradient-to-r from-orange-400 to-red-500':'bg-gradient-to-r from-purple-500 to-pink-500'}"
-                     style="width:${d.percentage}%"></div>
-            </div>
-            ${d.voters.length?`<div class="mt-2 text-xs text-gray-600 break-words">
-                Votado por: ${d.voters.map(v=>`${v.emoji} ${v.name}${v.isSuper?' ⚡':''}`).join(', ')}</div>`:''}`
-        ).join('')}
-    </div>`;
-}
-
-/* El Match */
-function renderMatch(match){
-    const map={};
-    getVisibleParticipants().forEach(p=>{ map[p.name]=p.emoji; });
-    return `<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4" style="border:2px solid #a855f7;">
-        <div class="text-center mb-3">
-            <span class="text-lg sm:text-xl font-bold text-purple-700">💞 El Match</span>
-            <p class="text-xs text-gray-500 mt-1">Parejas que más veces han votado a la misma persona</p>
-        </div>
-        <div class="space-y-3">
-            ${match.topPairs.map(pair=>`
-            <div class="flex items-center justify-center gap-3 bg-purple-50 rounded-xl p-3">
-                <div class="flex items-center gap-1">
-                    <span class="text-2xl">${map[pair[0]]||'👤'}</span>
-                    <span class="font-semibold text-sm text-purple-700">${pair[0]}</span>
-                </div>
-                <span class="text-purple-400 font-bold text-xl">💞</span>
-                <div class="flex items-center gap-1">
-                    <span class="font-semibold text-sm text-purple-700">${pair[1]}</span>
-                    <span class="text-2xl">${map[pair[1]]||'👤'}</span>
-                </div>
-            </div>`).join('')}
-        </div>
-        <p class="text-center text-xs text-gray-500 mt-3">
-            Coincidencia: ${match.maxCount} de ${match.totalQuestions} pregunta${match.totalQuestions>1?'s':''}</p>
-    </div>`;
+function renderVoteResults(res){
+    return`<div class="space-y-3">
+${Object.entries(res).map(([n,d])=>`<div class="bg-purple-50 rounded-xl p-3">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-2 flex-1 min-w-0">
+<span class="text-xl sm:text-2xl flex-shrink-0">${d.emoji}</span>
+<span class="font-bold text-sm sm:text-base truncate">${n}</span>
+${d.hasSuper?'<span class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">⭐SÚPER</span>':''}
+</div>
+<span class="font-bold text-purple-600 text-sm sm:text-base flex-shrink-0">${d.percentage}%</span>
+</div>
+<div class="bg-purple-200 rounded-full h-3 overflow-hidden">
+<div class="vote-bar bg-gradient-to-r from-purple-500 to-pink-500 h-full"style="width:${d.percentage}%"></div></div>
+${d.voters.length?`<div class="mt-2 text-xs text-gray-600 break-words">
+Votado por: ${d.voters.map(v=>`${v.emoji} ${v.name}${v.isSuper?' ⭐':''}`).join(', ')}</div>`:''}</div>`).join('')}
+</div>`;
 }
 
 // ============================================================
 //  INICIALIZACIÓN
 // ============================================================
-window.addEventListener('DOMContentLoaded',()=>{ if(initFirebase()){app.currentScreen='home';render();} });
-document.addEventListener('touchstart',()=>{},{passive:true});
+window.addEventListener('DOMContentLoaded',()=>{
+    if(initFirebase()){
+        // Si no se restauró ninguna sala, ir a home
+        if(app.currentScreen !== 'game' && app.currentScreen !== 'identity'){
+            app.currentScreen='home';
+            render();
+        }
+    }
+});
+
+// Actualizar timestamp de actividad cada minuto
+setInterval(()=>{
+    if(app.roomCode){
+        saveActiveRoom();
+    }
+},60000);
+
 </script>
 </body>
 </html>
