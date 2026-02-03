@@ -11,1204 +11,778 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-        
-        * {
-            font-family: 'Poppins', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            box-sizing: border-box;
-        }
-        
-        html {
-            overflow-x: hidden;
-            width: 100%;
-        }
-        
+        * { font-family:'Poppins',sans-serif; -webkit-tap-highlight-color:transparent; box-sizing:border-box; }
+        html { overflow-x:hidden; width:100%; }
         body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            max-width: 100vw;
-            overflow-x: hidden;
-            overflow-y: auto;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            background-attachment: fixed;
-            min-height: 100vh;
-            -webkit-overflow-scrolling: touch;
+            margin:0; padding:0; width:100%; max-width:100vw;
+            overflow-x:hidden; overflow-y:auto;
+            background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+            background-attachment:fixed; min-height:100vh;
+            -webkit-overflow-scrolling:touch;
         }
-        
-        #app {
-            width: 100%;
-            max-width: 100vw;
-            overflow-x: hidden;
-            padding-bottom: 4rem;
-        }
-        
-        .safe-container {
-            width: 100%;
-            max-width: 640px;
-            margin: 0 auto;
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-        
-        .glow-card {
-            box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
-            transition: all 0.2s ease;
-        }
-        
-        .glow-card:active {
-            box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
-            transform: scale(0.98);
-        }
-        
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        
-        .gradient-yellow {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-        }
-        
-        .gradient-purple {
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-        }
-        
-        .emoji-avatar {
-            font-size: 2rem;
-            filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.4));
-        }
-        
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #fbbf24;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .pulse-glow {
-            animation: pulse-glow 2s ease-in-out infinite;
-        }
-        
-        @keyframes pulse-glow {
-            0%, 100% {
-                box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
-            }
-            50% {
-                box-shadow: 0 0 40px rgba(251, 191, 36, 0.6);
-            }
-        }
-        
-        .chat-message {
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .vote-bar {
-            transition: width 0.5s ease-out;
-        }
-
-        .countdown-timer {
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            font-size: 1.25rem;
-            color: #fbbf24;
-            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
-        }
-        
-        .chat-container {
-            max-height: 300px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        button {
-            touch-action: manipulation;
-            min-height: 44px;
-            min-width: 44px;
-        }
-        
-        input, select {
-            font-size: 16px !important;
-        }
-        
-        @media (max-width: 640px) {
-            .countdown-timer {
-                font-size: 1rem;
-            }
-        }
+        #app { width:100%; max-width:100vw; overflow-x:hidden; padding-bottom:4rem; }
+        .safe-container { width:100%; max-width:640px; margin:0 auto; padding-left:1rem; padding-right:1rem; }
+        .glow-card { box-shadow:0 0 20px rgba(251,191,36,0.3); transition:all 0.2s ease; }
+        .glow-card:active { box-shadow:0 0 30px rgba(251,191,36,0.5); transform:scale(0.98); }
+        .gradient-bg { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); }
+        .gradient-yellow { background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%); }
+        .gradient-purple { background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%); }
+        .gradient-super { background:linear-gradient(135deg,#f59e0b 0%,#ef4444 100%); }
+        .emoji-avatar { font-size:2rem; filter:drop-shadow(0 0 8px rgba(251,191,36,0.4)); }
+        .loader { border:4px solid #f3f3f3; border-top:4px solid #fbbf24; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; }
+        @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+        .pulse-glow { animation:pulse-glow 2s ease-in-out infinite; }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 20px rgba(251,191,36,0.3)} 50%{box-shadow:0 0 40px rgba(251,191,36,0.6)} }
+        .super-pulse { animation:super-pulse 1.4s ease-in-out infinite; }
+        @keyframes super-pulse { 0%,100%{box-shadow:0 0 12px rgba(239,68,68,0.4)} 50%{box-shadow:0 0 28px rgba(239,68,68,0.8)} }
+        .chat-message { animation:slideIn 0.3s ease-out; }
+        @keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        .vote-bar { transition:width 0.5s ease-out; }
+        .countdown-timer { font-family:'Courier New',monospace; font-weight:bold; font-size:1.25rem; color:#fbbf24; text-shadow:0 0 10px rgba(251,191,36,0.5); }
+        .chat-container { max-height:300px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+        button { touch-action:manipulation; min-height:44px; min-width:44px; }
+        input, select { font-size:16px !important; }
+        @media (max-width:640px){ .countdown-timer{ font-size:1rem; } }
     </style>
 </head>
 <body>
-    <div id="app"></div>
-
-    <script>
-        // ==================== CONFIGURACIÓN FIREBASE ====================
-        const FIREBASE_CONFIG = {
-            apiKey: "AIzaSyC20KU4GMb6t0Go3QNDVjrrSojI9KkMRYU",
-            authDomain: "thechosen-1b39d.firebaseapp.com",
-            databaseURL: "https://thechosen-1b39d-default-rtdb.europe-west1.firebasedatabase.app",
-            projectId: "thechosen-1b39d",
-            storageBucket: "thechosen-1b39d.firebasestorage.app",
-            messagingSenderId: "49156406876",
-            appId: "1:49156406876:web:837d574efd8caeba88f099"
-        };
-
-        const ADMIN_KEY = "Admin_Chosen_99";
-
-        // ==================== PREGUNTAS DE RESPALDO (FALLBACK) ====================
-        const FALLBACK_QUESTIONS = [
-            { category: 'Salseo', text: '¿Quién tiene el secreto más jugoso que nunca ha contado?' },
-            { category: 'Supervivencia', text: '¿Quién sobreviviría más tiempo en una isla desierta?' },
-            { category: 'Personalidad', text: '¿Quién es más probable que se vuelva famoso?' },
-            { category: 'Trabajo', text: '¿Quién sería el mejor jefe/a?' },
-            { category: 'Salseo', text: '¿Quién es más probable que tenga un romance secreto?' }
-        ];
-
-        // ==================== CONSTANTES ====================
-        const EMOJIS = ['😎', '🎮', '🚀', '🌟', '💜', '🔥', '🎨', '🎭', '🎪', '🎯', '🍕', '🌮', '🍔', '🎵', '⚡', '🌈', '🦄', '👑', '💎', '🎸'];
-        
-        // ==================== ESTADO GLOBAL ====================
-        let app = {
-            currentScreen: 'home',
-            roomCode: null,
-            roomName: null,
-            userName: null,
-            userEmoji: null,
-            isAdmin: false,
-            db: null,
-            questionsDB: [],
-            currentQuestion: null,
-            dailyQuestionEndTime: null,
-            usedQuestions: [],
-            participants: {},
-            votes: {},
-            extraQuestions: [],
-            chatMessages: [],
-            firebaseInitialized: false,
-            countdownInterval: null
-        };
-
-        // ==================== FUNCIONES DE FIREBASE ====================
-        function initFirebase() {
-            const hasConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL;
-            
-            if (!hasConfig) {
-                console.error('❌ FALTA CONFIGURACIÓN DE FIREBASE');
-                app.currentScreen = 'configuring';
-                render();
-                return false;
-            }
-
-            try {
-                if (!firebase.apps.length) {
-                    firebase.initializeApp(FIREBASE_CONFIG);
-                }
-                app.db = firebase.database();
-                app.firebaseInitialized = true;
-                console.log('✅ Firebase inicializado correctamente');
-                
-                // Cargar preguntas desde Firebase
-                loadQuestionsFromFirebase();
-                
-                return true;
-            } catch (error) {
-                console.error('⚠️ Error al inicializar Firebase:', error.message);
-                console.log('💡 Usando preguntas de respaldo locales.');
-                app.questionsDB = FALLBACK_QUESTIONS;
-                app.currentScreen = 'configuring';
-                render();
-                return false;
-            }
-        }
-
-        async function loadQuestionsFromFirebase() {
-            try {
-                const snapshot = await app.db.ref('preguntas').once('value');
-                const data = snapshot.val();
-
-                if (!data || typeof data !== 'object') {
-                    console.log('⚠️ No hay preguntas en Firebase, usando respaldo local');
-                    app.questionsDB = FALLBACK_QUESTIONS;
-                    return;
-                }
-
-                const parsed = [];
-
-                // Estructura en Firebase:
-                // preguntas/
-                //   Trabajo/
-                //     trabajo_001: "¿Texto...?"
-                //     trabajo_002: "¿Texto...?"
-                //   Salseo/
-                //     salseo_001: "¿Texto...?"
-                Object.entries(data).forEach(([category, questions]) => {
-                    if (questions && typeof questions === 'object') {
-                        Object.values(questions).forEach(text => {
-                            if (typeof text === 'string') {
-                                parsed.push({ category: category, text: text });
-                            }
-                        });
-                    }
-                });
-
-                if (parsed.length > 0) {
-                    app.questionsDB = parsed;
-                    console.log(`✅ Cargadas ${parsed.length} preguntas desde Firebase`);
-                } else {
-                    console.log('⚠️ No se encontraron preguntas válidas, usando respaldo local');
-                    app.questionsDB = FALLBACK_QUESTIONS;
-                }
-            } catch (error) {
-                console.error('❌ Error al cargar preguntas de Firebase:', error);
-                app.questionsDB = FALLBACK_QUESTIONS;
-            }
-        }
-
-
-        function generateRoomCode() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let code = '';
-            for (let i = 0; i < 4; i++) {
-                code += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return code;
-        }
-
-        function getRandomQuestion(excludeUsed = true) {
-            if (!app.questionsDB || app.questionsDB.length === 0) {
-                return {
-                    category: 'Error',
-                    text: '¡Añade una pregunta extra para jugar!'
-                };
-            }
-            
-            let availableQuestions = app.questionsDB;
-            
-            if (excludeUsed && app.usedQuestions.length > 0) {
-                availableQuestions = app.questionsDB.filter(q => 
-                    !app.usedQuestions.some(used => used.text === q.text)
-                );
-            }
-            
-            // Si se agotaron todas, reiniciar
-            if (availableQuestions.length === 0) {
-                app.usedQuestions = [];
-                availableQuestions = app.questionsDB;
-            }
-            
-            return availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
-        }
-
-        async function createRoom() {
-            const roomNameInput = document.getElementById('roomNameInput');
-            const roomName = roomNameInput ? roomNameInput.value.trim() : '';
-            const finalRoomName = roomName || 'Sala sin nombre';
-            
-            showLoader(true);
-            
-            const code = generateRoomCode();
-            const now = Date.now();
-            const dailyQuestion = getRandomQuestion(false);
-            
-            const roomData = {
-                code: code,
-                name: finalRoomName,
-                createdAt: now,
-                currentQuestion: dailyQuestion,
-                dailyQuestionEndTime: now + (24 * 60 * 60 * 1000),
-                usedQuestions: [dailyQuestion],
-                participants: {},
-                votes: {},
-                extraQuestions: [],
-                chat: []
-            };
-
-            try {
-                await app.db.ref(`rooms/${code}`).set(roomData);
-                saveRoomToHistory(code, finalRoomName);
-                showLoader(false);
-                joinRoom(code);
-            } catch (error) {
-                console.error('Error al crear sala:', error);
-                alert('Error al crear la sala. Intenta de nuevo.');
-                showLoader(false);
-            }
-        }
-
-        async function joinRoom(code) {
-            code = code.toUpperCase();
-            app.roomCode = code;
-
-            try {
-                const snapshot = await app.db.ref(`rooms/${code}`).once('value');
-                
-                if (!snapshot.exists()) {
-                    alert('La sala no existe. Verifica el código.');
-                    return;
-                }
-
-                // Leer el nombre de la sala del snapshot que ya tenemos
-                app.roomName = snapshot.val().name || 'Sala sin nombre';
-
-                const savedIdentity = localStorage.getItem(`identity_${code}`);
-                
-                if (savedIdentity) {
-                    const identity = JSON.parse(savedIdentity);
-                    app.userName = identity.name;
-                    app.userEmoji = identity.emoji || '👻';
-                    app.isAdmin = identity.name === ADMIN_KEY;
-                    
-                    enterRoom();
-                } else {
-                    app.currentScreen = 'identity';
-                    render();
-                }
-            } catch (error) {
-                console.error('Error al unirse a la sala:', error);
-                alert('Error al unirse a la sala.');
-            }
-        }
-
-        function enterRoom() {
-            localStorage.setItem(`identity_${app.roomCode}`, JSON.stringify({
-                name: app.userName,
-                emoji: app.userEmoji
-            }));
-
-            saveRoomToHistory(app.roomCode, app.roomName);
-
-            // Solo registrar en Firebase si NO es admin
-            if (!app.isAdmin) {
-                const participantRef = app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`);
-                participantRef.set({
-                    name: app.userName,
-                    emoji: app.userEmoji,
-                    lastSeen: Date.now()
-                });
-
-                participantRef.onDisconnect().remove();
-            }
-
-            setupRoomListeners();
-
-            app.currentScreen = 'game';
-            render();
-            startCountdown();
-        }
-
-        function setupRoomListeners() {
-            const roomRef = app.db.ref(`rooms/${app.roomCode}`);
-
-            roomRef.child('name').on('value', (snapshot) => {
-                app.roomName = snapshot.val();
-                render();
-            });
-
-            roomRef.child('currentQuestion').on('value', (snapshot) => {
-                app.currentQuestion = snapshot.val();
-                render();
-            });
-
-            roomRef.child('dailyQuestionEndTime').on('value', (snapshot) => {
-                app.dailyQuestionEndTime = snapshot.val();
-                checkDailyReset();
-                render();
-            });
-
-            roomRef.child('usedQuestions').on('value', (snapshot) => {
-                app.usedQuestions = snapshot.val() || [];
-            });
-
-            roomRef.child('participants').on('value', (snapshot) => {
-                app.participants = snapshot.val() || {};
-                render();
-            });
-
-            roomRef.child('votes').on('value', (snapshot) => {
-                app.votes = snapshot.val() || {};
-                render();
-            });
-
-            roomRef.child('extraQuestions').on('value', (snapshot) => {
-                app.extraQuestions = snapshot.val() || [];
-                render();
-            });
-
-            roomRef.child('chat').on('value', (snapshot) => {
-                app.chatMessages = snapshot.val() || [];
-                render();
-            });
-        }
-
-        async function checkDailyReset() {
-            if (!app.dailyQuestionEndTime) return;
-            
-            const now = Date.now();
-            
-            if (now >= app.dailyQuestionEndTime) {
-                const newQuestion = getRandomQuestion(true);
-                const newEndTime = now + (24 * 60 * 60 * 1000);
-                
-                await app.db.ref(`rooms/${app.roomCode}`).update({
-                    currentQuestion: newQuestion,
-                    dailyQuestionEndTime: newEndTime,
-                    usedQuestions: [...app.usedQuestions, newQuestion],
-                    votes: {},
-                    extraQuestions: []
-                });
-            }
-        }
-
-        function startCountdown() {
-            if (app.countdownInterval) {
-                clearInterval(app.countdownInterval);
-            }
-            
-            app.countdownInterval = setInterval(() => {
-                updateCountdown();
-            }, 1000);
-        }
-
-        function updateCountdown() {
-            const countdownEl = document.getElementById('countdown');
-            if (!countdownEl || !app.dailyQuestionEndTime) return;
-            
-            const now = Date.now();
-            const remaining = app.dailyQuestionEndTime - now;
-            
-            if (remaining <= 0) {
-                countdownEl.textContent = '00:00:00';
-                checkDailyReset();
-                return;
-            }
-            
-            const hours = Math.floor(remaining / (1000 * 60 * 60));
-            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-            
-            countdownEl.textContent = 
-                `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }
-
-        async function nextQuestion() {
-            if (!app.isAdmin) return;
-            
-            const newQuestion = getRandomQuestion(true);
-            const now = Date.now();
-            
-            await app.db.ref(`rooms/${app.roomCode}`).update({
-                currentQuestion: newQuestion,
-                dailyQuestionEndTime: now + (24 * 60 * 60 * 1000),
-                usedQuestions: [...app.usedQuestions, newQuestion],
-                votes: {},
-                extraQuestions: []
-            });
-        }
-
-        async function resetVotes() {
-            if (!app.isAdmin) return;
-            await app.db.ref(`rooms/${app.roomCode}/votes`).set({});
-        }
-
-        async function vote(targetName, questionId = 'daily') {
-            // Prevenir voto al admin
-            if (targetName === ADMIN_KEY) return;
-            
-            const voteKey = `${questionId}_${app.userName}`;
-            const voteRef = app.db.ref(`rooms/${app.roomCode}/votes/${voteKey}`);
-            
-            await voteRef.set({
-                voter: app.userName,
-                voterEmoji: app.userEmoji,
-                target: targetName,
-                questionId: questionId,
-                timestamp: Date.now()
-            });
-        }
-
-        function canAddExtraQuestion() {
-            const lastQuestionTime = localStorage.getItem(`lastExtraQuestion_${app.roomCode}`);
-            
-            if (!lastQuestionTime) return true;
-            
-            const now = Date.now();
-            const timePassed = now - parseInt(lastQuestionTime);
-            const twentyFourHours = 24 * 60 * 60 * 1000;
-            
-            return timePassed >= twentyFourHours;
-        }
-
-        function getTimeUntilNextQuestion() {
-            const lastQuestionTime = localStorage.getItem(`lastExtraQuestion_${app.roomCode}`);
-            if (!lastQuestionTime) return null;
-            
-            const now = Date.now();
-            const timePassed = now - parseInt(lastQuestionTime);
-            const twentyFourHours = 24 * 60 * 60 * 1000;
-            const remaining = twentyFourHours - timePassed;
-            
-            if (remaining <= 0) return null;
-            
-            const hours = Math.floor(remaining / (1000 * 60 * 60));
-            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-            
-            return `${hours}h ${minutes}m`;
-        }
-
-        async function addExtraQuestion(category, text) {
-            if (!canAddExtraQuestion()) {
-                alert(`Debes esperar ${getTimeUntilNextQuestion()} para enviar otra pregunta.`);
-                return;
-            }
-            
-            const extraRef = app.db.ref(`rooms/${app.roomCode}/extraQuestions`);
-            const questionId = `extra_${Date.now()}`;
-            const newQuestions = [...app.extraQuestions, { 
-                id: questionId,
-                category, 
-                text,
-                timestamp: Date.now()
-            }];
-            
-            await extraRef.set(newQuestions);
-            
-            localStorage.setItem(`lastExtraQuestion_${app.roomCode}`, Date.now().toString());
-        }
-
-        async function sendChatMessage(text) {
-            const chatRef = app.db.ref(`rooms/${app.roomCode}/chat`);
-            const newMessages = [...app.chatMessages, {
-                u: app.userName,
-                e: app.userEmoji,
-                t: text,
-                ts: Date.now()
-            }];
-            await chatRef.set(newMessages);
-        }
-
-        function saveRoomToHistory(code, name) {
-            let history = JSON.parse(localStorage.getItem('roomHistory') || '[]');
-            
-            history = history.filter(room => room.code !== code);
-            
-            history.unshift({
-                code: code,
-                name: name,
-                lastAccess: Date.now()
-            });
-            
-            history = history.slice(0, 5);
-            
-            localStorage.setItem('roomHistory', JSON.stringify(history));
-        }
-
-        function getRoomHistory() {
-            return JSON.parse(localStorage.getItem('roomHistory') || '[]');
-        }
-
-        function showLoader(show) {
-            const loader = document.getElementById('loader');
-            if (loader) {
-                loader.style.display = show ? 'flex' : 'none';
-            }
-        }
-
-        // Filtrar participantes (excluir admin)
-        function getVisibleParticipants() {
-            return Object.values(app.participants).filter(p => p.name !== ADMIN_KEY);
-        }
-
-        // ==================== FUNCIONES DE RENDERIZADO ====================
-        function render() {
-            const appDiv = document.getElementById('app');
-            
-            switch(app.currentScreen) {
-                case 'configuring':
-                    appDiv.innerHTML = renderConfiguring();
-                    break;
-                case 'home':
-                    appDiv.innerHTML = renderHome();
-                    break;
-                case 'identity':
-                    appDiv.innerHTML = renderIdentity();
-                    attachIdentityEvents();
-                    break;
-                case 'game':
-                    appDiv.innerHTML = renderGame();
-                    attachGameEvents();
-                    break;
-            }
-        }
-
-        function renderConfiguring() {
-            return `
-                <div class="min-h-screen flex items-center justify-center p-4">
-                    <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full">
-                        <div class="text-center mb-6">
-                            <div class="text-6xl mb-4">⚙️</div>
-                            <h1 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">Configurando Firebase...</h1>
-                        </div>
-                        
-                        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-                            <p class="text-sm text-blue-700 font-semibold mb-2">
-                                ℹ️ ¿Estás viendo esto en la preview de Claude?
-                            </p>
-                            <p class="text-xs text-blue-600">
-                                La preview bloquea conexiones externas por seguridad. 
-                                <strong>Descarga el archivo y ábrelo en tu navegador</strong> para que funcione.
-                            </p>
-                        </div>
-
-                        <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
-                            <p class="text-sm text-green-700 font-semibold mb-2">
-                                ✅ Firebase está configurado
-                            </p>
-                            <p class="text-xs text-green-600">
-                                Las credenciales están en el código. Ábrelo en Chrome, Firefox o Safari.
-                            </p>
-                        </div>
-
-                        <button onclick="location.reload()" 
-                                class="w-full mt-6 gradient-purple text-white font-bold py-3 rounded-xl hover:opacity-90 transition-all">
-                            🔄 Reintentar Conexión
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderHome() {
-            const history = getRoomHistory();
-            
-            return `
-                <div class="min-h-screen flex items-center justify-center py-8">
-                    <div class="safe-container">
-                        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
-                            <div class="text-center mb-8">
-                                <div class="text-5xl sm:text-6xl mb-4">👑</div>
-                                <h1 class="text-3xl sm:text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">
-                                    The Chosen
-                                </h1>
-                                <p class="text-gray-600">¿Quién es el elegido?</p>
-                            </div>
-
-                            <div class="space-y-4">
-                                <div>
-                                    <input type="text" 
-                                           id="roomNameInput"
-                                           placeholder="Nombre de la sala (ej: Cumple de Ana)"
-                                           class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-3 text-base">
-                                    <button onclick="createRoom()" 
-                                            class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
-                                        <span class="text-xl">➕</span>
-                                        Crear Sala Nueva
-                                    </button>
-                                </div>
-
-                                <div class="flex flex-col gap-3">
-                                    <input type="text" 
-                                           id="roomCodeInput"
-                                           placeholder="Código"
-                                           maxlength="4"
-                                           class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
-                                           onkeyup="this.value = this.value.toUpperCase(); if(event.key === 'Enter') joinRoomFromInput()">
-                                    <button onclick="joinRoomFromInput()"
-                                            class="gradient-purple text-white font-bold px-8 py-3 rounded-xl glow-card whitespace-nowrap">
-                                        Unirse
-                                    </button>
-                                </div>
-                            </div>
-
-                            ${history.length > 0 ? `
-                                <div class="mt-8">
-                                    <h3 class="text-sm font-semibold text-gray-600 mb-3">📍 Salas Recientes</h3>
-                                    <div class="space-y-2">
-                                        ${history.map(room => `
-                                            <button onclick="joinRoom('${room.code}')"
-                                                    class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
-                                                <div class="font-bold text-sm sm:text-base">${room.name}</div>
-                                                <div class="text-xs text-purple-500">Código: ${room.code}</div>
-                                            </button>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            ` : ''}
-                        </div>
-
-                        <div id="loader" style="display: none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div class="bg-white rounded-2xl p-8 text-center mx-4">
-                                <div class="loader mx-auto mb-4"></div>
-                                <p class="text-gray-700 font-semibold">Creando sala...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderIdentity() {
-            return `
-                <div class="min-h-screen flex items-center justify-center py-8">
-                    <div class="safe-container">
-                        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
-                            <div class="text-center mb-8">
-                                <h2 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">
-                                    Sala ${app.roomCode}
-                                </h2>
-                                <p class="text-gray-600">Elige tu identidad</p>
-                            </div>
-
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tu nombre</label>
-                                    <input type="text" 
-                                           id="nameInput"
-                                           placeholder="Escribe tu nombre"
-                                           class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
-                                           onkeyup="if(event.key === 'Enter') document.getElementById('enterRoomBtn').click()">
-                                </div>
-
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tu emoji</label>
-                                    <div class="grid grid-cols-8 sm:grid-cols-10 gap-2" id="emojiGrid">
-                                        ${EMOJIS.map(emoji => `
-                                            <button onclick="selectEmoji('${emoji}')" 
-                                                    class="emoji-btn text-2xl p-2 hover:bg-purple-100 rounded-lg transition-all"
-                                                    data-emoji="${emoji}">
-                                                ${emoji}
-                                            </button>
-                                        `).join('')}
-                                    </div>
-                                    <div id="selectedEmoji" class="text-center mt-4 text-5xl emoji-avatar"></div>
-                                </div>
-
-                                <button id="enterRoomBtn"
-                                        onclick="submitIdentity()"
-                                        class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card mt-6">
-                                    Entrar a la Sala
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderGame() {
-            const participantsList = getVisibleParticipants();
-            const dailyVoteResults = calculateVoteResults('daily');
-            const userDailyVote = Object.values(app.votes).find(v => 
-                v.voter === app.userName && v.questionId === 'daily'
-            );
-
-            return `
-                <div class="safe-container py-4">
-                    <!-- Header -->
-                    <div class="bg-white rounded-2xl shadow-lg p-4 mb-4">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="flex items-center gap-3 flex-1 min-w-0">
-                                <div class="text-2xl sm:text-3xl flex-shrink-0">${app.userEmoji}</div>
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-bold text-purple-600 truncate">${app.userName}</div>
-                                    <div class="text-xs sm:text-sm text-gray-500 truncate">${app.roomName || 'Sala ' + app.roomCode}</div>
-                                </div>
-                            </div>
-                            
-                            <div class="flex items-center gap-2 flex-shrink-0">
-                                ${!app.isAdmin ? `
-                                    <button onclick="toggleParticipants()" 
-                                            class="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-purple-200 transition-all">
-                                        👥 ${participantsList.length}
-                                    </button>
-                                ` : ''}
-                                <button onclick="changeIdentity()" 
-                                        class="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-200 transition-all">
-                                    👤
-                                </button>
-                                <button onclick="leaveRoom()" 
-                                        class="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-red-200 transition-all">
-                                    Salir
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Lista de Participantes -->
-                    ${!app.isAdmin ? `
-                        <div id="participantsList" style="display: none;" class="bg-white rounded-2xl shadow-lg p-4 mb-4">
-                            <h3 class="font-bold text-purple-600 mb-3">Participantes:</h3>
-                            <div class="grid grid-cols-2 gap-2">
-                                ${participantsList.map(p => `
-                                    <div class="flex items-center gap-2 bg-purple-50 p-2 rounded-lg">
-                                        <span class="text-xl sm:text-2xl">${p.emoji}</span>
-                                        <span class="font-semibold text-xs sm:text-sm truncate">${p.name}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    ${app.isAdmin ? `
-                        <!-- Admin Tools -->
-                        <div class="bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl shadow-lg p-4 mb-4">
-                            <h3 class="text-white font-bold mb-3 text-sm sm:text-base">🔧 Panel de Administrador</h3>
-                            <div class="flex flex-col sm:flex-row gap-2">
-                                <button onclick="nextQuestion()" 
-                                        class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 transition-all text-sm">
-                                    ⏭️ Siguiente Pregunta
-                                </button>
-                                <button onclick="resetVotes()" 
-                                        class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 transition-all text-sm">
-                                    🔄 Reiniciar Votos
-                                </button>
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    <!-- Pregunta Diaria -->
-                    ${app.currentQuestion ? `
-                        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card pulse-glow">
-                            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
-                                <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
-                                    ${app.currentQuestion.category}
-                                </span>
-                                <div class="countdown-timer" id="countdown">00:00:00</div>
-                            </div>
-                            <h2 class="text-lg sm:text-2xl font-bold text-purple-600 text-center mb-6">
-                                ${app.currentQuestion.text}
-                            </h2>
-
-                            ${userDailyVote ? renderVoteResults(dailyVoteResults) : renderVoteOptions(participantsList, 'daily')}
-                        </div>
-                    ` : ''}
-
-                    <!-- Preguntas Extra -->
-                    ${app.extraQuestions.map((q, idx) => {
-                        const extraVoteResults = calculateVoteResults(q.id);
-                        const userExtraVote = Object.values(app.votes).find(v => 
-                            v.voter === app.userName && v.questionId === q.id
-                        );
-                        
-                        return `
-                            <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card">
-                                <div class="text-center mb-4">
-                                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
-                                        ${q.category}
-                                    </span>
-                                </div>
-                                <h3 class="text-base sm:text-xl font-bold text-purple-600 text-center mb-6">
-                                    ${q.text}
-                                </h3>
-                                ${userExtraVote ? renderVoteResults(extraVoteResults) : renderVoteOptions(participantsList, q.id)}
-                            </div>
-                        `;
-                    }).join('')}
-
-                    ${!app.isAdmin ? `
-                        <!-- Agregar Pregunta Extra -->
-                        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4">
-                            <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">➕ Agregar Pregunta Personal</h3>
-                            ${!canAddExtraQuestion() ? `
-                                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-3">
-                                    <p class="text-xs sm:text-sm text-yellow-700">
-                                        ⏳ Debes esperar ${getTimeUntilNextQuestion()} para enviar otra pregunta.
-                                    </p>
-                                </div>
-                            ` : ''}
-                            <div class="space-y-3">
-                                <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base" ${!canAddExtraQuestion() ? 'disabled' : ''}>
-                                    <option value="Salseo">🔥 Salseo</option>
-                                    <option value="Supervivencia">🏝️ Supervivencia</option>
-                                    <option value="Personalidad">💫 Personalidad</option>
-                                    <option value="Trabajo">💼 Trabajo</option>
-                                </select>
-                                <input type="text" 
-                                       id="extraText"
-                                       placeholder="Escribe tu pregunta..."
-                                       class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
-                                       ${!canAddExtraQuestion() ? 'disabled' : ''}
-                                       onkeyup="if(event.key === 'Enter') addExtraQuestionFromInput()">
-                                <button onclick="addExtraQuestionFromInput()"
-                                        ${!canAddExtraQuestion() ? 'disabled' : ''}
-                                        class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canAddExtraQuestion() ? 'opacity-50 cursor-not-allowed' : ''}">
-                                    Agregar Pregunta
-                                </button>
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    <!-- Chat de Reacciones -->
-                    <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-8">
-                        <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">💬 Chat de Reacciones</h3>
-                        <div id="chatContainer" class="chat-container space-y-2 mb-4">
-                            ${app.chatMessages.map(msg => `
-                                <div class="chat-message bg-purple-50 rounded-lg p-3">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <span class="text-lg sm:text-xl">${msg.e}</span>
-                                        <span class="font-semibold text-xs sm:text-sm">${msg.u}</span>
-                                    </div>
-                                    <div class="text-gray-700 text-sm break-words">${msg.t}</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        <div class="flex gap-2">
-                            <input type="text" 
-                                   id="chatInput"
-                                   placeholder="Escribe una reacción..."
-                                   class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
-                                   onkeyup="if(event.key === 'Enter') sendChatFromInput()">
-                            <button onclick="sendChatFromInput()"
-                                    class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card">
-                                📤
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderVoteOptions(participants, questionId) {
-            return `
-                <div class="grid grid-cols-2 gap-2 sm:gap-3">
-                    ${participants.map(p => `
-                        <button onclick="vote('${p.name}', '${questionId}')"
-                                class="bg-purple-50 hover:bg-purple-100 active:bg-purple-200 p-3 sm:p-4 rounded-xl transition-all text-center">
-                            <div class="text-2xl sm:text-3xl mb-1 sm:mb-2">${p.emoji}</div>
-                            <div class="font-semibold text-purple-700 text-xs sm:text-sm truncate">${p.name}</div>
-                        </button>
-                    `).join('')}
-                </div>
-            `;
-        }
-
-        function renderVoteResults(results) {
-            return `
-                <div class="space-y-3">
-                    ${Object.entries(results).map(([name, data]) => `
-                        <div class="bg-purple-50 rounded-xl p-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="flex items-center gap-2 flex-1 min-w-0">
-                                    <span class="text-xl sm:text-2xl flex-shrink-0">${data.emoji}</span>
-                                    <span class="font-bold text-sm sm:text-base truncate">${name}</span>
-                                </div>
-                                <span class="font-bold text-purple-600 text-sm sm:text-base flex-shrink-0">${data.percentage}%</span>
-                            </div>
-                            <div class="bg-purple-200 rounded-full h-3 overflow-hidden">
-                                <div class="vote-bar bg-gradient-to-r from-purple-500 to-pink-500 h-full" 
-                                     style="width: ${data.percentage}%"></div>
-                            </div>
-                            ${data.voters.length > 0 ? `
-                                <div class="mt-2 text-xs text-gray-600 break-words">
-                                    Votado por: ${data.voters.map(v => `${v.emoji} ${v.name}`).join(', ')}
-                                </div>
-                            ` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
-
-        function calculateVoteResults(questionId) {
-            const results = {};
-            const relevantVotes = Object.values(app.votes).filter(v => v.questionId === questionId);
-            const totalVotes = relevantVotes.length;
-
-            // Inicializar solo con participantes visibles
-            getVisibleParticipants().forEach(p => {
-                results[p.name] = {
-                    emoji: p.emoji,
-                    count: 0,
-                    percentage: 0,
-                    voters: []
-                };
-            });
-
-            // Contar votos
-            relevantVotes.forEach(vote => {
-                if (results[vote.target]) {
-                    results[vote.target].count++;
-                    results[vote.target].voters.push({
-                        name: vote.voter,
-                        emoji: vote.voterEmoji
-                    });
-                }
-            });
-
-            // Calcular porcentajes
-            Object.keys(results).forEach(name => {
-                if (totalVotes > 0) {
-                    results[name].percentage = Math.round((results[name].count / totalVotes) * 100);
-                }
-            });
-
-            return results;
-        }
-
-        // ==================== EVENT HANDLERS ====================
-        function joinRoomFromInput() {
-            const input = document.getElementById('roomCodeInput');
-            const code = input.value.trim();
-            if (code.length === 4) {
-                joinRoom(code);
-            } else {
-                alert('El código debe tener 4 caracteres');
-            }
-        }
-
-        function selectEmoji(emoji) {
-            app.userEmoji = emoji;
-            const emojiDisplay = document.getElementById('selectedEmoji');
-            if (emojiDisplay) {
-                emojiDisplay.textContent = emoji;
-            }
-            
-            document.querySelectorAll('.emoji-btn').forEach(btn => {
-                btn.classList.remove('bg-purple-200', 'scale-125');
-            });
-            const selectedBtn = document.querySelector(`[data-emoji="${emoji}"]`);
-            if (selectedBtn) {
-                selectedBtn.classList.add('bg-purple-200', 'scale-125');
-            }
-        }
-
-        function submitIdentity() {
-            const nameInput = document.getElementById('nameInput');
-            const name = nameInput.value.trim();
-
-            if (!name) {
-                alert('Por favor, escribe tu nombre');
-                return;
-            }
-
-            app.userName = name;
-            app.isAdmin = name === ADMIN_KEY;
-            
-            // Si es admin, usar emoji fantasma y saltar selección
-            if (app.isAdmin) {
-                app.userEmoji = '👻';
-                enterRoom();
-            } else {
-                if (!app.userEmoji) {
-                    alert('Por favor, selecciona un emoji');
-                    return;
-                }
-                enterRoom();
-            }
-        }
-
-        function attachIdentityEvents() {
-            // Eventos inline
-        }
-
-        function attachGameEvents() {
-            const chatContainer = document.getElementById('chatContainer');
-            if (chatContainer) {
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }
-            
-            updateCountdown();
-        }
-
-        function toggleParticipants() {
-            const list = document.getElementById('participantsList');
-            if (list) {
-                list.style.display = list.style.display === 'none' ? 'block' : 'none';
-            }
-        }
-
-        function leaveRoom() {
-            if (confirm('¿Seguro que quieres salir de la sala?')) {
-                if (app.roomCode && app.userName && !app.isAdmin) {
-                    app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
-                }
-                
-                if (app.countdownInterval) {
-                    clearInterval(app.countdownInterval);
-                }
-                
-                app.currentScreen = 'home';
-                app.roomCode = null;
-                render();
-            }
-        }
-
-        function changeIdentity() {
-            // Borrar participante anterior de Firebase (solo si no era admin)
-            if (app.roomCode && app.userName && !app.isAdmin) {
-                app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
-            }
-
-            // Borrar identidad guardada de esta sala
-            localStorage.removeItem(`identity_${app.roomCode}`);
-
-            // Resetear estado local
-            app.userName = null;
-            app.userEmoji = null;
-            app.isAdmin = false;
-
-            // Volver a la pantalla de selección de nombre
-            app.currentScreen = 'identity';
-            render();
-        }
-
-        function addExtraQuestionFromInput() {
-            const category = document.getElementById('extraCategory').value;
-            const text = document.getElementById('extraText').value.trim();
-
-            if (!text) {
-                alert('Por favor, escribe una pregunta');
-                return;
-            }
-
-            addExtraQuestion(category, text);
-            document.getElementById('extraText').value = '';
-        }
-
-        function sendChatFromInput() {
-            const input = document.getElementById('chatInput');
-            const text = input.value.trim();
-
-            if (!text) return;
-
-            sendChatMessage(text);
-            input.value = '';
-            
-            // Scroll al final
-            setTimeout(() => {
-                const chatContainer = document.getElementById('chatContainer');
-                if (chatContainer) {
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                }
-            }, 100);
-        }
-
-        // ==================== INICIALIZACIÓN ====================
-        window.addEventListener('DOMContentLoaded', () => {
-            if (initFirebase()) {
-                app.currentScreen = 'home';
-                render();
-            }
+<div id="app"></div>
+<script>
+// ============================================================
+//  CONFIGURACIÓN
+// ============================================================
+const FIREBASE_CONFIG = {
+    apiKey:"AIzaSyC20KU4GMb6t0Go3QNDVjrrSojI9KkMRYU",
+    authDomain:"thechosen-1b39d.firebaseapp.com",
+    databaseURL:"https://thechosen-1b39d-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId:"thechosen-1b39d",
+    storageBucket:"thechosen-1b39d.firebasestorage.app",
+    messagingSenderId:"49156406876",
+    appId:"1:49156406876:web:837d574efd8caeba88f099"
+};
+const ADMIN_KEY = "Admin_Chosen_99";
+const FALLBACK_QUESTIONS = [
+    {category:'Salseo',text:'¿Quién tiene el secreto más jugoso que nunca ha contado?'},
+    {category:'Supervivencia',text:'¿Quién sobreviviría más tiempo en una isla desierta?'},
+    {category:'Personalidad',text:'¿Quién es más probable que se vuelva famoso?'},
+    {category:'Trabajo',text:'¿Quién sería el mejor jefe/a?'},
+    {category:'Salseo',text:'¿Quién es más probable que tenga un romance secreto?'}
+];
+const EMOJIS=['😎','🎮','🚀','🌟','💜','🔥','🎨','🎭','🎪','🎯','🍕','🌮','🍔','🎵','⚡','🌈','🦄','👑','💎','🎸'];
+
+// ============================================================
+//  ESTADO GLOBAL
+// ============================================================
+let app = {
+    currentScreen:'home',
+    roomCode:null, roomName:null,
+    userName:null, userEmoji:null, isAdmin:false,
+    db:null, questionsDB:[],
+    currentQuestion:null, dailyQuestionEndTime:null, usedQuestions:[],
+    participants:{}, votes:{},
+    extraQuestions:[], extraLimits:{}, superVotes:{},
+    chatMessages:[],
+    firebaseInitialized:false,
+    countdownInterval:null,
+    activeRoomRef:null   // se guarda para hacer .off() al cambiar / salir de sala
+};
+
+// ============================================================
+//  FIREBASE – INIT & PREGUNTAS
+// ============================================================
+function initFirebase(){
+    if(!FIREBASE_CONFIG.apiKey||!FIREBASE_CONFIG.databaseURL){
+        app.currentScreen='configuring'; render(); return false;
+    }
+    try{
+        if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        app.db=firebase.database();
+        app.firebaseInitialized=true;
+        loadQuestionsFromFirebase();
+        return true;
+    } catch(e){
+        app.questionsDB=FALLBACK_QUESTIONS;
+        app.currentScreen='configuring'; render(); return false;
+    }
+}
+
+async function loadQuestionsFromFirebase(){
+    try{
+        const data=(await app.db.ref('preguntas').once('value')).val();
+        if(!data||typeof data!=='object'){app.questionsDB=FALLBACK_QUESTIONS;return;}
+        const parsed=[];
+        Object.entries(data).forEach(([cat,qs])=>{
+            if(qs&&typeof qs==='object')
+                Object.values(qs).forEach(t=>{ if(typeof t==='string') parsed.push({category:cat,text:t}); });
         });
+        app.questionsDB=parsed.length>0?parsed:FALLBACK_QUESTIONS;
+    } catch(e){ app.questionsDB=FALLBACK_QUESTIONS; }
+}
 
-        // Prevenir zoom en iOS en inputs
-        document.addEventListener('touchstart', function() {}, {passive: true});
-    </script>
+// ============================================================
+//  SALAS – crear / unirse / entrar
+// ============================================================
+function generateRoomCode(){
+    const c='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let r=''; for(let i=0;i<4;i++) r+=c.charAt(Math.floor(Math.random()*c.length)); return r;
+}
+
+function getRandomQuestion(excludeUsed=true){
+    if(!app.questionsDB||!app.questionsDB.length)
+        return {category:'Error',text:'¡Añade una pregunta extra para jugar!'};
+    let avail=app.questionsDB;
+    if(excludeUsed&&app.usedQuestions.length)
+        avail=app.questionsDB.filter(q=>!app.usedQuestions.some(u=>u.text===q.text));
+    if(!avail.length){app.usedQuestions=[];avail=app.questionsDB;}
+    return avail[Math.floor(Math.random()*avail.length)];
+}
+
+async function createRoom(){
+    const inp=document.getElementById('roomNameInput');
+    const name=(inp?inp.value.trim():'')||'Sala sin nombre';
+    showLoader(true);
+    const code=generateRoomCode(), now=Date.now(), q=getRandomQuestion(false);
+    try{
+        await app.db.ref(`rooms/${code}`).set({
+            code, name, createdAt:now,
+            currentQuestion:q,
+            dailyQuestionEndTime: now+86400000,
+            usedQuestions:[q],
+            participants:{}, votes:{},
+            extraQuestions:[], extraLimits:{}, superVotes:{},
+            chat:[]
+        });
+        saveRoomToHistory(code,name);
+        showLoader(false);
+        joinRoom(code);
+    } catch(e){ alert('Error al crear sala.'); showLoader(false); }
+}
+
+async function joinRoom(code){
+    code=code.toUpperCase();
+    app.roomCode=code;
+    try{
+        const snap=await app.db.ref(`rooms/${code}`).once('value');
+        if(!snap.exists()){alert('La sala no existe. Verifica el código.');return;}
+        app.roomName=snap.val().name||'Sala sin nombre';
+
+        const saved=localStorage.getItem(`identity_${code}`);
+        if(saved){
+            const id=JSON.parse(saved);
+            app.userName=id.name; app.userEmoji=id.emoji||'👻';
+            app.isAdmin=id.name===ADMIN_KEY;
+            enterRoom();
+        } else {
+            app.currentScreen='identity'; render();
+        }
+    } catch(e){ alert('Error al unirse.'); }
+}
+
+function enterRoom(){
+    localStorage.setItem(`identity_${app.roomCode}`,JSON.stringify({name:app.userName,emoji:app.userEmoji}));
+    saveRoomToHistory(app.roomCode,app.roomName);
+
+    /*
+     * PERSISTENCIA: se guarda el participante de forma permanente.
+     * NO hay onDisconnect().remove() → el jugador sigue apareciendo
+     * aunque cierre la pestaña o se desconecte.
+     */
+    if(!app.isAdmin){
+        app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).set({
+            name:app.userName, emoji:app.userEmoji, joinedAt:Date.now()
+        });
+    }
+
+    setupRoomListeners();
+    app.currentScreen='game'; render(); startCountdown();
+}
+
+// ============================================================
+//  LISTENERS – con limpieza para aislamiento entre salas
+// ============================================================
+function cleanupListeners(){
+    /*
+     * AISLAMIENTO: antes de salir o cambiar de sala se hace .off()
+     * sobre el roomRef anterior. Así los listeners de la sala vieja
+     * dejan de escribir en app.participants / app.votes / etc.
+     */
+    if(app.activeRoomRef){ app.activeRoomRef.off(); app.activeRoomRef=null; }
+    if(app.countdownInterval){ clearInterval(app.countdownInterval); app.countdownInterval=null; }
+}
+
+function setupRoomListeners(){
+    cleanupListeners();                                    // limpiar sala anterior si existe
+    const ref=app.db.ref(`rooms/${app.roomCode}`);
+    app.activeRoomRef=ref;                                 // guardar para limpiar después
+
+    ref.child('name').on('value',             s=>{app.roomName=s.val();render();});
+    ref.child('currentQuestion').on('value',  s=>{app.currentQuestion=s.val();render();});
+    ref.child('dailyQuestionEndTime').on('value',s=>{app.dailyQuestionEndTime=s.val();checkDailyReset();render();});
+    ref.child('usedQuestions').on('value',    s=>{app.usedQuestions=s.val()||[];});
+    ref.child('participants').on('value',     s=>{app.participants=s.val()||{};render();});
+    ref.child('votes').on('value',            s=>{app.votes=s.val()||{};render();});
+    ref.child('extraQuestions').on('value',   s=>{app.extraQuestions=s.val()||[];render();});
+    ref.child('extraLimits').on('value',      s=>{app.extraLimits=s.val()||{};render();});
+    ref.child('superVotes').on('value',       s=>{app.superVotes=s.val()||{};render();});
+    ref.child('chat').on('value',             s=>{app.chatMessages=s.val()||[];render();});
+}
+
+// ============================================================
+//  RESET DIARIO
+// ============================================================
+async function checkDailyReset(){
+    if(!app.dailyQuestionEndTime||Date.now()<app.dailyQuestionEndTime) return;
+    const q=getRandomQuestion(true), now=Date.now();
+    /*
+     * SINCRONIZACIÓN EXTRA: extraQuestions, extraLimits y superVotes
+     * se reinician junto con la pregunta diaria (cada 24 h desde la sala).
+     */
+    await app.db.ref(`rooms/${app.roomCode}`).update({
+        currentQuestion:q,
+        dailyQuestionEndTime: now+86400000,
+        usedQuestions:[...app.usedQuestions,q],
+        votes:{}, extraQuestions:[], extraLimits:{}, superVotes:{}
+    });
+}
+
+// ============================================================
+//  COUNTDOWN
+// ============================================================
+function startCountdown(){
+    if(app.countdownInterval) clearInterval(app.countdownInterval);
+    app.countdownInterval=setInterval(updateCountdown,1000);
+}
+function updateCountdown(){
+    const el=document.getElementById('countdown');
+    if(!el||!app.dailyQuestionEndTime) return;
+    const rem=app.dailyQuestionEndTime-Date.now();
+    if(rem<=0){el.textContent='00:00:00';checkDailyReset();return;}
+    const h=Math.floor(rem/3600000),m=Math.floor((rem%3600000)/60000),s=Math.floor((rem%60000)/1000);
+    el.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ============================================================
+//  ADMIN
+// ============================================================
+async function nextQuestion(){
+    if(!app.isAdmin) return;
+    const q=getRandomQuestion(true), now=Date.now();
+    await app.db.ref(`rooms/${app.roomCode}`).update({
+        currentQuestion:q, dailyQuestionEndTime:now+86400000,
+        usedQuestions:[...app.usedQuestions,q],
+        votes:{}, extraQuestions:[], extraLimits:{}, superVotes:{}
+    });
+}
+async function resetVotes(){
+    if(!app.isAdmin) return;
+    await app.db.ref(`rooms/${app.roomCode}`).update({votes:{},superVotes:{}});
+}
+
+// ============================================================
+//  VOTOS + SÚPER VOTO
+// ============================================================
+async function vote(target,questionId='daily'){
+    if(target===ADMIN_KEY) return;
+    await app.db.ref(`rooms/${app.roomCode}/votes/${questionId}_${app.userName}`).set({
+        voter:app.userName, voterEmoji:app.userEmoji,
+        target, questionId, weight:1, timestamp:Date.now()
+    });
+}
+
+/*
+ * SÚPER VOTO: cambia el peso del voto del usuario a 2.
+ * Solo una vez por ciclo de 24 h (controlado por superVotes en Firebase).
+ */
+async function superVote(questionId='daily'){
+    if(app.superVotes[app.userName]) return;                         // ya usado este ciclo
+    const key=`rooms/${app.roomCode}/votes/${questionId}_${app.userName}`;
+    const snap=await app.db.ref(key).once('value');
+    if(!snap.exists()) return;                                       // debe tener voto previo
+    await app.db.ref(`rooms/${app.roomCode}/superVotes/${app.userName}`).set(true);
+    await app.db.ref(`${key}/weight`).set(2);                        // duplicar peso
+}
+
+// ============================================================
+//  PREGUNTA EXTRA – límite sincronizado con ciclo de sala
+// ============================================================
+function canAddExtraQuestion(){
+    /*
+     * El ciclo actual comenzó en (dailyQuestionEndTime – 24 h).
+     * Si el usuario ya agregó una pregunta DESPUÉS de ese momento → bloquear.
+     * Al reiniciarse el ciclo, extraLimits se limpia → se habilita de nuevo.
+     */
+    const cycleStart=(app.dailyQuestionEndTime||0)-86400000;
+    return (app.extraLimits[app.userName]||0)<cycleStart;
+}
+function getTimeUntilNextExtra(){
+    if(!app.dailyQuestionEndTime) return null;
+    const rem=app.dailyQuestionEndTime-Date.now();
+    if(rem<=0) return null;
+    return `${Math.floor(rem/3600000)}h ${Math.floor((rem%3600000)/60000)}m`;
+}
+
+async function addExtraQuestion(cat,text){
+    if(!canAddExtraQuestion()){alert(`Espera ${getTimeUntilNextExtra()} (se reinicia con la pregunta diaria).`);return;}
+    const id=`extra_${Date.now()}`;
+    await app.db.ref(`rooms/${app.roomCode}`).update({
+        extraQuestions:[...app.extraQuestions,{id,category:cat,text,timestamp:Date.now()}],
+        [`extraLimits/${app.userName}`]:Date.now()
+    });
+}
+
+// ============================================================
+//  CHAT
+// ============================================================
+async function sendChatMessage(text){
+    await app.db.ref(`rooms/${app.roomCode}/chat`).set([
+        ...app.chatMessages,{u:app.userName,e:app.userEmoji,t:text,ts:Date.now()}
+    ]);
+}
+
+// ============================================================
+//  HISTORIAL LOCAL
+// ============================================================
+function saveRoomToHistory(code,name){
+    let h=JSON.parse(localStorage.getItem('roomHistory')||'[]');
+    h=h.filter(r=>r.code!==code);
+    h.unshift({code,name,lastAccess:Date.now()});
+    localStorage.setItem('roomHistory',JSON.stringify(h.slice(0,5)));
+}
+function getRoomHistory(){ return JSON.parse(localStorage.getItem('roomHistory')||'[]'); }
+
+// ============================================================
+//  UTILIDADES
+// ============================================================
+function showLoader(v){ const e=document.getElementById('loader'); if(e) e.style.display=v?'flex':'none'; }
+function getVisibleParticipants(){ return Object.values(app.participants).filter(p=>p.name!==ADMIN_KEY); }
+
+// ============================================================
+//  CÁLCULO DE RESULTADOS
+// ============================================================
+function calculateVoteResults(questionId){
+    const results={};
+    const votes=Object.values(app.votes).filter(v=>v.questionId===questionId);
+    const totalWeight=votes.reduce((s,v)=>s+(v.weight||1),0);
+
+    getVisibleParticipants().forEach(p=>{
+        results[p.name]={emoji:p.emoji,count:0,percentage:0,voters:[],hasSuper:false};
+    });
+    votes.forEach(v=>{
+        if(!results[v.target]) return;
+        const w=v.weight||1;
+        results[v.target].count+=w;
+        results[v.target].voters.push({name:v.voter,emoji:v.voterEmoji,isSuper:w>1});
+        if(w>1) results[v.target].hasSuper=true;
+    });
+    Object.keys(results).forEach(n=>{
+        results[n].percentage=totalWeight>0?Math.round(results[n].count/totalWeight*100):0;
+    });
+    return results;
+}
+
+// ============================================================
+//  EL MATCH – parejas que más coinciden
+// ============================================================
+function calculateMatch(){
+    /*
+     * Agrupa cada voto por pregunta → mapa { questionId: { voter: target } }.
+     * Luego para cada par de jugadores cuenta en cuántas preguntas eligieron
+     * al mismo target. Devuelve las parejas con el máximo de coincidencias.
+     */
+    const byQ={};
+    Object.values(app.votes).forEach(v=>{
+        if(!byQ[v.questionId]) byQ[v.questionId]={};
+        byQ[v.questionId][v.voter]=v.target;
+    });
+    const qIds=Object.keys(byQ);
+    if(!qIds.length) return null;
+
+    const pairs={};
+    qIds.forEach(qId=>{
+        const voters=byQ[qId], names=Object.keys(voters);
+        for(let i=0;i<names.length;i++)
+            for(let j=i+1;j<names.length;j++)
+                if(voters[names[i]]===voters[names[j]]){
+                    const key=[names[i],names[j]].sort().join('|');
+                    pairs[key]=(pairs[key]||0)+1;
+                }
+    });
+    if(!Object.keys(pairs).length) return null;
+
+    const max=Math.max(...Object.values(pairs));
+    return {
+        topPairs:Object.entries(pairs).filter(([,c])=>c===max).map(([k])=>k.split('|')),
+        maxCount:max,
+        totalQuestions:qIds.length
+    };
+}
+
+// ============================================================
+//  EVENT HANDLERS
+// ============================================================
+function joinRoomFromInput(){
+    const v=document.getElementById('roomCodeInput').value.trim();
+    v.length===4?joinRoom(v):alert('El código debe tener 4 caracteres');
+}
+function selectEmoji(emoji){
+    app.userEmoji=emoji;
+    const d=document.getElementById('selectedEmoji'); if(d) d.textContent=emoji;
+    document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.remove('bg-purple-200','scale-125'));
+    const b=document.querySelector(`[data-emoji="${emoji}"]`); if(b) b.classList.add('bg-purple-200','scale-125');
+}
+function submitIdentity(){
+    const name=document.getElementById('nameInput').value.trim();
+    if(!name){alert('Por favor, escribe tu nombre');return;}
+    app.userName=name; app.isAdmin=name===ADMIN_KEY;
+    if(app.isAdmin){app.userEmoji='👻';enterRoom();}
+    else{ if(!app.userEmoji){alert('Selecciona un emoji');return;} enterRoom(); }
+}
+
+/*
+ * PERSISTENCIA – leaveRoom / changeIdentity ya NO eliminan
+ * el participante de Firebase. Solo limpian listeners locales.
+ */
+function leaveRoom(){
+    if(!confirm('¿Seguro que quieres salir?')) return;
+    cleanupListeners();
+    app.currentScreen='home'; app.roomCode=null; render();
+}
+function changeIdentity(){
+    cleanupListeners();
+
+    // Borrar el participante ANTERIOR para que no quede fantasma.
+    // Es el único lugar donde un remove es correcto: el usuario
+    // está cambiando activamente su nombre dentro de la misma sala.
+    if(app.roomCode && app.userName && !app.isAdmin){
+        app.db.ref(`rooms/${app.roomCode}/participants/${app.userName}`).remove();
+    }
+
+    localStorage.removeItem(`identity_${app.roomCode}`);
+    app.userName=null; app.userEmoji=null; app.isAdmin=false;
+    app.currentScreen='identity'; render();
+}
+
+function toggleParticipants(){
+    const l=document.getElementById('participantsList');
+    if(l) l.style.display=l.style.display==='none'?'block':'none';
+}
+function addExtraQuestionFromInput(){
+    const cat=document.getElementById('extraCategory').value;
+    const txt=document.getElementById('extraText').value.trim();
+    if(!txt){alert('Escribe una pregunta');return;}
+    addExtraQuestion(cat,txt);
+    document.getElementById('extraText').value='';
+}
+function sendChatFromInput(){
+    const inp=document.getElementById('chatInput'), t=inp.value.trim();
+    if(!t) return;
+    sendChatMessage(t); inp.value='';
+    setTimeout(()=>{const c=document.getElementById('chatContainer');if(c)c.scrollTop=c.scrollHeight;},100);
+}
+
+// ============================================================
+//  RENDER – enrutador
+// ============================================================
+function render(){
+    const a=document.getElementById('app');
+    switch(app.currentScreen){
+        case 'configuring': a.innerHTML=renderConfiguring(); break;
+        case 'home':        a.innerHTML=renderHome();        break;
+        case 'identity':    a.innerHTML=renderIdentity();    break;
+        case 'game':        a.innerHTML=renderGame();        attachGameEvents(); break;
+    }
+}
+function attachGameEvents(){
+    const c=document.getElementById('chatContainer'); if(c) c.scrollTop=c.scrollHeight;
+    updateCountdown();
+}
+
+// ── Configuring ──────────────────────────────────────────────
+function renderConfiguring(){
+    return `<div class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full">
+            <div class="text-center mb-6"><div class="text-6xl mb-4">⚙️</div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-purple-600">Configurando Firebase...</h1></div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+                <p class="text-sm text-blue-700 font-semibold">ℹ️ ¿Estás viendo esto en la preview de Claude?</p>
+                <p class="text-xs text-blue-600">La preview bloquea conexiones externas. <strong>Descarga el archivo y ábrelo en tu navegador.</strong></p>
+            </div>
+            <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
+                <p class="text-sm text-green-700 font-semibold">✅ Firebase está configurado</p>
+                <p class="text-xs text-green-600">Ábrelo en Chrome, Firefox o Safari.</p>
+            </div>
+            <button onclick="location.reload()" class="w-full mt-4 gradient-purple text-white font-bold py-3 rounded-xl">🔄 Reintentar</button>
+        </div></div>`;
+}
+
+// ── Home ─────────────────────────────────────────────────────
+function renderHome(){
+    const history=getRoomHistory();
+    return `<div class="min-h-screen flex items-center justify-center py-8"><div class="safe-container">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
+            <div class="text-center mb-8">
+                <div class="text-5xl sm:text-6xl mb-4">👑</div>
+                <h1 class="text-3xl sm:text-4xl font-bold gradient-bg bg-clip-text text-transparent mb-2">The Chosen</h1>
+                <p class="text-gray-600">¿Quién es el elegido?</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <input type="text" id="roomNameInput" placeholder="Nombre de la sala (ej: Cumple de Ana)"
+                        class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none mb-3 text-base">
+                    <button onclick="createRoom()" class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card flex items-center justify-center gap-2">
+                        <span class="text-xl">➕</span> Crear Sala Nueva</button>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <input type="text" id="roomCodeInput" placeholder="Código" maxlength="4"
+                        class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none uppercase text-center text-xl font-bold"
+                        onkeyup="this.value=this.value.toUpperCase();if(event.key==='Enter')joinRoomFromInput()">
+                    <button onclick="joinRoomFromInput()" class="gradient-purple text-white font-bold px-8 py-3 rounded-xl glow-card">Unirse</button>
+                </div>
+            </div>
+            ${history.length?`<div class="mt-8">
+                <h3 class="text-sm font-semibold text-gray-600 mb-3">📍 Salas Recientes</h3>
+                <div class="space-y-2">${history.map(r=>`
+                    <button onclick="joinRoom('${r.code}')" class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all text-left">
+                        <div class="font-bold text-sm sm:text-base">${r.name||'Sala'}</div>
+                        <div class="text-xs text-purple-500">Código: ${r.code}</div></button>`).join('')}</div>
+            </div>`:''}
+        </div>
+        <div id="loader" style="display:none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-2xl p-8 text-center mx-4"><div class="loader mx-auto mb-4"></div>
+                <p class="text-gray-700 font-semibold">Creando sala...</p></div>
+        </div>
+    </div></div>`;
+}
+
+// ── Identity ─────────────────────────────────────────────────
+function renderIdentity(){
+    return `<div class="min-h-screen flex items-center justify-center py-8"><div class="safe-container">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full">
+            <div class="text-center mb-8">
+                <h2 class="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">Sala ${app.roomCode}</h2>
+                <p class="text-gray-600">Elige tu identidad</p>
+            </div>
+            <div class="space-y-4">
+                <div><label class="block text-sm font-semibold text-gray-700 mb-2">Tu nombre</label>
+                    <input type="text" id="nameInput" placeholder="Escribe tu nombre"
+                        class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+                        onkeyup="if(event.key==='Enter')document.getElementById('enterRoomBtn').click()"></div>
+                <div><label class="block text-sm font-semibold text-gray-700 mb-2">Tu emoji</label>
+                    <div class="grid grid-cols-8 sm:grid-cols-10 gap-2">
+                        ${EMOJIS.map(e=>`<button onclick="selectEmoji('${e}')" class="emoji-btn text-2xl p-2 hover:bg-purple-100 rounded-lg transition-all" data-emoji="${e}">${e}</button>`).join('')}
+                    </div>
+                    <div id="selectedEmoji" class="text-center mt-4 text-5xl emoji-avatar"></div>
+                </div>
+                <button id="enterRoomBtn" onclick="submitIdentity()" class="w-full gradient-yellow text-white font-bold py-4 rounded-xl glow-card mt-6">Entrar a la Sala</button>
+            </div>
+        </div>
+    </div></div>`;
+}
+
+// ── Game ─────────────────────────────────────────────────────
+function renderGame(){
+    const parts        = getVisibleParticipants();
+    const dailyRes     = calculateVoteResults('daily');
+    const myDailyVote  = Object.values(app.votes).find(v=>v.voter===app.userName&&v.questionId==='daily');
+    const usedSuper    = !!app.superVotes[app.userName];
+    const match        = calculateMatch();
+    const canExtra     = canAddExtraQuestion();
+
+    return `<div class="safe-container py-4">
+
+        <!-- HEADER -->
+        <div class="bg-white rounded-2xl shadow-lg p-4 mb-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <div class="text-2xl sm:text-3xl flex-shrink-0">${app.userEmoji}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-bold text-purple-600 truncate">${app.userName}</div>
+                        <div class="text-xs sm:text-sm text-gray-500 truncate">${app.roomName||'Sala '+app.roomCode}</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    ${!app.isAdmin?`<button onclick="toggleParticipants()" class="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-purple-200">👥 ${parts.length}</button>`:''}
+                    <button onclick="changeIdentity()" class="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-200">👤</button>
+                    <button onclick="leaveRoom()" class="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-red-200">Salir</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PARTICIPANTES (toggle) -->
+        ${!app.isAdmin?`
+        <div id="participantsList" style="display:none;" class="bg-white rounded-2xl shadow-lg p-4 mb-4">
+            <h3 class="font-bold text-purple-600 mb-3">Participantes:</h3>
+            <div class="grid grid-cols-2 gap-2">
+                ${parts.map(p=>`<div class="flex items-center gap-2 bg-purple-50 p-2 rounded-lg">
+                    <span class="text-xl sm:text-2xl">${p.emoji}</span>
+                    <span class="font-semibold text-xs sm:text-sm truncate">${p.name}</span></div>`).join('')}
+            </div>
+        </div>`:''}
+
+        <!-- ADMIN PANEL -->
+        ${app.isAdmin?`
+        <div class="bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl shadow-lg p-4 mb-4">
+            <h3 class="text-white font-bold mb-3 text-sm sm:text-base">🔧 Panel de Administrador</h3>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button onclick="nextQuestion()" class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 text-sm">⏭️ Siguiente Pregunta</button>
+                <button onclick="resetVotes()" class="flex-1 bg-white text-red-600 font-bold py-3 rounded-lg hover:bg-red-50 text-sm">🔄 Reiniciar Votos</button>
+            </div>
+        </div>`:''}
+
+        <!-- PREGUNTA DIARIA -->
+        ${app.currentQuestion?`
+        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card pulse-glow">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+                <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">${app.currentQuestion.category}</span>
+                <div class="countdown-timer" id="countdown">00:00:00</div>
+            </div>
+            <h2 class="text-lg sm:text-2xl font-bold text-purple-600 text-center mb-6">${app.currentQuestion.text}</h2>
+            ${myDailyVote?renderVoteResults(dailyRes):renderVoteOptions(parts,'daily')}
+            ${renderSuperVoteButton('daily',myDailyVote,usedSuper)}
+        </div>`:''}
+
+        <!-- PREGUNTAS EXTRA -->
+        ${app.extraQuestions.map(q=>{
+            const res=calculateVoteResults(q.id);
+            const myVote=Object.values(app.votes).find(v=>v.voter===app.userName&&v.questionId===q.id);
+            return `<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 glow-card">
+                <div class="text-center mb-4">
+                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">${q.category}</span>
+                </div>
+                <h3 class="text-base sm:text-xl font-bold text-purple-600 text-center mb-6">${q.text}</h3>
+                ${myVote?renderVoteResults(res):renderVoteOptions(parts,q.id)}
+                ${renderSuperVoteButton(q.id,myVote,usedSuper)}
+            </div>`;
+        }).join('')}
+
+        <!-- EL MATCH -->
+        ${match?renderMatch(match):''}
+
+        <!-- AGREGAR PREGUNTA EXTRA -->
+        ${!app.isAdmin?`
+        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4">
+            <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">➕ Agregar Pregunta Personal</h3>
+            ${!canExtra?`<div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 mb-3">
+                <p class="text-xs sm:text-sm text-yellow-700">⏳ Debes esperar ${getTimeUntilNextExtra()||'unos momentos'} (se reinicia con la pregunta diaria).</p>
+            </div>`:''}
+            <div class="space-y-3">
+                <select id="extraCategory" class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base" ${!canExtra?'disabled':''}>
+                    <option value="Salseo">🔥 Salseo</option>
+                    <option value="Supervivencia">🏝️ Supervivencia</option>
+                    <option value="Personalidad">💫 Personalidad</option>
+                    <option value="Trabajo">💼 Trabajo</option>
+                </select>
+                <input type="text" id="extraText" placeholder="Escribe tu pregunta..."
+                    class="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+                    ${!canExtra?'disabled':''} onkeyup="if(event.key==='Enter')addExtraQuestionFromInput()">
+                <button onclick="addExtraQuestionFromInput()" ${!canExtra?'disabled':''}
+                    class="w-full gradient-yellow text-white font-bold py-3 rounded-xl glow-card ${!canExtra?'opacity-50 cursor-not-allowed':''}">
+                    Agregar Pregunta</button>
+            </div>
+        </div>`:''}
+
+        <!-- CHAT -->
+        <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-8">
+            <h3 class="font-bold text-purple-600 mb-3 text-sm sm:text-base">💬 Chat de Reacciones</h3>
+            <div id="chatContainer" class="chat-container space-y-2 mb-4">
+                ${app.chatMessages.map(m=>`<div class="chat-message bg-purple-50 rounded-lg p-3">
+                    <div class="flex items-center gap-2 mb-1"><span class="text-lg sm:text-xl">${m.e}</span>
+                        <span class="font-semibold text-xs sm:text-sm">${m.u}</span></div>
+                    <div class="text-gray-700 text-sm break-words">${m.t}</div></div>`).join('')}
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="chatInput" placeholder="Escribe una reacción..."
+                    class="flex-1 px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none text-base"
+                    onkeyup="if(event.key==='Enter')sendChatFromInput()">
+                <button onclick="sendChatFromInput()" class="gradient-purple text-white font-bold px-6 py-3 rounded-xl glow-card">📤</button>
+            </div>
+        </div>
+    </div>`;
+}
+
+// ── Sub-componentes de render ────────────────────────────────
+
+/* Botón de Súper Voto (aparece solo si el usuario ya votó y no ha usado el súper) */
+function renderSuperVoteButton(questionId, myVote, usedSuper){
+    if(app.isAdmin||!myVote) return '';
+    if(!usedSuper) return `
+        <div class="mt-4 pt-4 border-t border-gray-100">
+            <button onclick="superVote('${questionId}')"
+                class="w-full gradient-super text-white font-bold py-3 rounded-xl super-pulse flex items-center justify-center gap-2 text-sm sm:text-base">
+                <span class="text-lg">⚡</span> Usar Súper Voto (×2)
+            </button>
+            <p class="text-center text-xs text-gray-500 mt-2">Hace que tu voto valga el doble. ¡Una vez al día!</p>
+        </div>`;
+    return `<div class="mt-4 pt-4 border-t border-gray-100 text-center">
+        <span class="text-xs text-orange-600 font-semibold">⚡ Ya usaste tu Súper Voto hoy</span></div>`;
+}
+
+/* Opciones de voto */
+function renderVoteOptions(participants,questionId){
+    return `<div class="grid grid-cols-2 gap-2 sm:gap-3">
+        ${participants.map(p=>`<button onclick="vote('${p.name}','${questionId}')"
+            class="bg-purple-50 hover:bg-purple-100 active:bg-purple-200 p-3 sm:p-4 rounded-xl transition-all text-center">
+            <div class="text-2xl sm:text-3xl mb-1 sm:mb-2">${p.emoji}</div>
+            <div class="font-semibold text-purple-700 text-xs sm:text-sm truncate">${p.name}</div></button>`).join('')}
+    </div>`;
+}
+
+/* Resultados de voto (con badge de súper) */
+function renderVoteResults(results){
+    return `<div class="space-y-3">
+        ${Object.entries(results).map(([name,d])=>`
+        <div class="rounded-xl p-3 ${d.hasSuper?'bg-orange-50 ring-2 ring-orange-400':'bg-purple-50'}">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                    <span class="text-xl sm:text-2xl flex-shrink-0">${d.emoji}</span>
+                    <span class="font-bold text-sm sm:text-base truncate">${name}</span>
+                    ${d.hasSuper?'<span class="text-xs bg-orange-200 text-orange-700 px-2 py-0.5 rounded-full font-semibold flex-shrink-0">⚡ Súper</span>':''}
+                </div>
+                <span class="font-bold text-purple-600 text-sm sm:text-base flex-shrink-0">${d.percentage}%</span>
+            </div>
+            <div class="bg-purple-200 rounded-full h-3 overflow-hidden">
+                <div class="vote-bar h-full ${d.hasSuper?'bg-gradient-to-r from-orange-400 to-red-500':'bg-gradient-to-r from-purple-500 to-pink-500'}"
+                     style="width:${d.percentage}%"></div>
+            </div>
+            ${d.voters.length?`<div class="mt-2 text-xs text-gray-600 break-words">
+                Votado por: ${d.voters.map(v=>`${v.emoji} ${v.name}${v.isSuper?' ⚡':''}`).join(', ')}</div>`:''}`
+        ).join('')}
+    </div>`;
+}
+
+/* El Match */
+function renderMatch(match){
+    const map={};
+    getVisibleParticipants().forEach(p=>{ map[p.name]=p.emoji; });
+    return `<div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4" style="border:2px solid #a855f7;">
+        <div class="text-center mb-3">
+            <span class="text-lg sm:text-xl font-bold text-purple-700">💞 El Match</span>
+            <p class="text-xs text-gray-500 mt-1">Parejas que más veces han votado a la misma persona</p>
+        </div>
+        <div class="space-y-3">
+            ${match.topPairs.map(pair=>`
+            <div class="flex items-center justify-center gap-3 bg-purple-50 rounded-xl p-3">
+                <div class="flex items-center gap-1">
+                    <span class="text-2xl">${map[pair[0]]||'👤'}</span>
+                    <span class="font-semibold text-sm text-purple-700">${pair[0]}</span>
+                </div>
+                <span class="text-purple-400 font-bold text-xl">💞</span>
+                <div class="flex items-center gap-1">
+                    <span class="font-semibold text-sm text-purple-700">${pair[1]}</span>
+                    <span class="text-2xl">${map[pair[1]]||'👤'}</span>
+                </div>
+            </div>`).join('')}
+        </div>
+        <p class="text-center text-xs text-gray-500 mt-3">
+            Coincidencia: ${match.maxCount} de ${match.totalQuestions} pregunta${match.totalQuestions>1?'s':''}</p>
+    </div>`;
+}
+
+// ============================================================
+//  INICIALIZACIÓN
+// ============================================================
+window.addEventListener('DOMContentLoaded',()=>{ if(initFirebase()){app.currentScreen='home';render();} });
+document.addEventListener('touchstart',()=>{},{passive:true});
+</script>
 </body>
 </html>
